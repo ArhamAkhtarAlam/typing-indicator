@@ -66,30 +66,70 @@ pnpm build
 HAS_VESKTOP=0
 { [ -d /Applications/Vesktop.app ] || command -v vesktop >/dev/null || flatpak info dev.vencord.Vesktop >/dev/null 2>&1; } && HAS_VESKTOP=1
 
-if [ "${SKIP_INJECT:-0}" != 1 ]; then
-    bold "==> Patching Discord (pick your install if asked, then quit Discord fully when it says so)"
-    if [ -r /dev/tty ]; then pnpm inject </dev/tty; else pnpm inject; fi
+# Discord installs to check (macOS + common Linux locations)
+discord_asars() {
+    for f in /Applications/Discord*.app/Contents/Resources/app.asar \
+             "$HOME/Applications"/Discord*.app/Contents/Resources/app.asar \
+             /opt/discord*/resources/app.asar /opt/Discord*/resources/app.asar \
+             /usr/share/discord*/resources/app.asar /usr/lib/discord*/resources/app.asar \
+             "$HOME/.local/share/discord"*/resources/app.asar; do
+        [ -f "$f" ] && echo "$f"
+    done
+}
 
-    # Vencord's installer exits 0 even when it fails, so check the result ourselves (macOS)
-    if [ "$(uname)" = Darwin ]; then
-        PATCHED=0; FOUND=0
-        for app in /Applications/Discord*.app "$HOME/Applications"/Discord*.app; do
-            asar="$app/Contents/Resources/app.asar"
-            [ -f "$asar" ] || continue
-            FOUND=1
-            grep -qF "$VENCORD_DIR/dist" "$asar" 2>/dev/null && PATCHED=1
-        done
-        if [ "$FOUND" = 1 ] && [ "$PATCHED" = 0 ]; then
+# If Discord is already patched with Vencord (e.g. from the official installer), it loads
+# <somewhere>/dist/patcher.js. Point that dist folder at our build with a symlink instead of
+# re-patching Discord: no admin rights or macOS App Management permission needed, and your
+# Vencord settings stay put.
+relink_existing() {
+    local asar target dist linked=0
+    while IFS= read -r asar; do
+        target=$(grep -ao 'require("[^"]*/patcher\.js")' "$asar" 2>/dev/null | head -1 | sed 's/^require("//; s/")$//')
+        [ -n "$target" ] || continue
+        dist=$(dirname "$target")
+        if [ "$dist" = "$VENCORD_DIR/dist" ] || [ "$(readlink "$dist" 2>/dev/null)" = "$VENCORD_DIR/dist" ]; then
+            linked=1; continue
+        fi
+        [ -w "$(dirname "$dist")" ] || continue
+        if [ -L "$dist" ]; then
+            rm "$dist"
+        elif [ -e "$dist" ]; then
+            mv "$dist" "$dist.backup-$(date +%Y%m%d-%H%M%S)"
+        fi
+        ln -s "$VENCORD_DIR/dist" "$dist"
+        echo "   Linked $dist -> $VENCORD_DIR/dist (old build backed up next to it)"
+        linked=1
+    done < <(discord_asars)
+    [ "$linked" = 1 ]
+}
+
+if [ "${SKIP_INJECT:-0}" != 1 ]; then
+    bold "==> Hooking up Discord"
+    if relink_existing; then
+        echo "   Discord already has Vencord, now pointing it at this build."
+    else
+        bold "==> Patching Discord (pick your install if asked, then quit Discord fully when it says so)"
+        if [ -r /dev/tty ]; then pnpm inject </dev/tty; else pnpm inject; fi
+
+        # Vencord's installer exits 0 even when it fails, so check the result ourselves
+        OK=0; ANY=0
+        while IFS= read -r asar; do
+            ANY=1
+            grep -qF "$VENCORD_DIR/dist" "$asar" 2>/dev/null && OK=1
+        done < <(discord_asars)
+        if [ "$ANY" = 1 ] && [ "$OK" = 0 ]; then
             echo
-            printf '\033[31m%s\033[0m\n' "Discord isn't using your new build yet. Patching it failed (probably 'operation not permitted')."
-            echo "macOS is blocking Terminal from changing apps. To fix it:"
-            echo "  1. System Settings → Privacy & Security → App Management → turn ON your terminal app"
-            echo "     (Terminal / iTerm / Claude, whichever you ran this in). Restart that app if asked."
-            echo "  2. Quit Discord (Cmd+Q), then run this installer again."
+            printf '\033[31m%s\033[0m\n' "Patching Discord failed, so it isn't using the new build yet."
+            if [ "$(uname)" = Darwin ]; then
+                echo "macOS is blocking your terminal from changing apps. To fix it:"
+                echo "  1. System Settings → Privacy & Security → App Management → turn ON your terminal app"
+                echo "     (Terminal / iTerm / whichever you ran this in). Restart that app if asked."
+                echo "  2. Quit Discord (Cmd+Q), then run this installer again."
+            else
+                echo "Close Discord completely and run this installer again (with sudo if Discord is in /opt or /usr)."
+            fi
             exit 1
         fi
-    else
-        echo "(If you saw '❌ Failed' above, run this again with admin rights or close Discord first.)"
     fi
 fi
 
