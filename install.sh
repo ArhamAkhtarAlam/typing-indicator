@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# TypingVerbs installer for macOS / Linux.
+# Vencord plugin installer for macOS / Linux (TypingVerbs + ValorantDND).
 #   curl -fsSL https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.sh | bash
 # Re-run it any time to update Vencord + the plugin.
 #
 # Env vars:
 #   VENCORD_DIR=~/Vencord   where the Vencord source build lives
 #   SKIP_INJECT=1           build only, don't patch Discord (e.g. you use Vesktop)
+#   PLUGINS="valorantDnd"   only install these plugin folders (default: all of them)
 set -euo pipefail
 
 REPO_URL="https://github.com/ArhamAkhtarAlam/typing-indicator.git"
@@ -30,13 +31,13 @@ fi
 # ---------- get plugin source ----------
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")" 2>/dev/null && pwd || echo "")"
 if [ -n "$SCRIPT_DIR" ] && [ -f "$SCRIPT_DIR/typingVerbs/index.tsx" ]; then
-    PLUGIN_SRC="$SCRIPT_DIR/typingVerbs"
+    REPO_ROOT="$SCRIPT_DIR"
 else
     TMP="$(mktemp -d)"
     trap 'rm -rf "$TMP"' EXIT
     bold "==> Downloading TypingVerbs"
     git clone --quiet --depth 1 "$REPO_URL" "$TMP/repo"
-    PLUGIN_SRC="$TMP/repo/typingVerbs"
+    REPO_ROOT="$TMP/repo"
 fi
 
 # ---------- get / update Vencord source ----------
@@ -51,10 +52,14 @@ else
 fi
 
 # ---------- copy plugin + build ----------
-bold "==> Installing plugin"
+ALL_PLUGINS="typingVerbs valorantDnd"
 mkdir -p "$VENCORD_DIR/src/userplugins"
-rm -rf "$VENCORD_DIR/src/userplugins/typingVerbs"
-cp -R "$PLUGIN_SRC" "$VENCORD_DIR/src/userplugins/typingVerbs"
+for p in ${PLUGINS:-$ALL_PLUGINS}; do
+    [ -d "$REPO_ROOT/$p" ] || die "unknown plugin '$p' (choose from: $ALL_PLUGINS)"
+    bold "==> Installing plugin $p"
+    rm -rf "$VENCORD_DIR/src/userplugins/$p"
+    cp -R "$REPO_ROOT/$p" "$VENCORD_DIR/src/userplugins/$p"
+done
 
 cd "$VENCORD_DIR"
 bold "==> Installing dependencies (first time takes a minute)"
@@ -136,8 +141,9 @@ fi
 echo
 bold "Done! 🐱"
 echo "1. Fully quit Discord and reopen it."
-echo "2. Settings → Vencord → Plugins: turn OFF TypingTweaks, turn ON TypingVerbs."
-echo "3. Click the cog next to TypingVerbs and set your verb (e.g. meowing)."
+echo "2. Settings → Vencord → Plugins, then turn on what you want:"
+echo "   • TypingVerbs: also turn OFF TypingTweaks, then click its cog and set your verb (e.g. meowing)"
+echo "   • ValorantDND: DND only while VALORANT runs (turn OFF AutoDNDWhilePlaying if it's on)"
 if [ "$HAS_VESKTOP" = 1 ]; then
     echo
     echo "Vesktop users: Vesktop Settings → Developer Options → Vencord Location → pick $VENCORD_DIR/dist"

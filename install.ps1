@@ -1,10 +1,11 @@
-# TypingVerbs installer for Windows (PowerShell).
+# Vencord plugin installer for Windows (TypingVerbs + ValorantDND).
 #   irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
 # Re-run it any time to update Vencord + the plugin.
 #
 # Env vars:
 #   $env:VENCORD_DIR = "$HOME\Vencord"   where the Vencord source build lives
 #   $env:SKIP_INJECT = "1"               build only, don't patch Discord (e.g. you use Vesktop)
+#   $env:PLUGINS = "valorantDnd"         only install these plugin folders (default: all of them)
 
 $ErrorActionPreference = "Stop"
 
@@ -34,12 +35,12 @@ function Pnpm {
 # ---------- get plugin source ----------
 $Tmp = $null
 if ($PSScriptRoot -and (Test-Path (Join-Path $PSScriptRoot "typingVerbs\index.tsx"))) {
-    $PluginSrc = Join-Path $PSScriptRoot "typingVerbs"
+    $RepoRoot = $PSScriptRoot
 } else {
     Say "Downloading TypingVerbs"
     $Tmp = Join-Path ([IO.Path]::GetTempPath()) ("typingverbs-" + [guid]::NewGuid())
     Run git clone --quiet --depth 1 $RepoUrl "$Tmp\repo"
-    $PluginSrc = "$Tmp\repo\typingVerbs"
+    $RepoRoot = "$Tmp\repo"
 }
 
 try {
@@ -57,11 +58,17 @@ try {
     }
 
     # ---------- copy plugin + build ----------
-    Say "Installing plugin"
-    $dest = Join-Path $VencordDir "src\userplugins\typingVerbs"
-    New-Item -ItemType Directory -Force -Path (Split-Path $dest) | Out-Null
-    if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
-    Copy-Item -Recurse $PluginSrc $dest
+    $AllPlugins = @("typingVerbs", "valorantDnd")
+    $Wanted = if ($env:PLUGINS) { $env:PLUGINS -split "[ ,]+" | Where-Object { $_ } } else { $AllPlugins }
+    New-Item -ItemType Directory -Force -Path (Join-Path $VencordDir "src\userplugins") | Out-Null
+    foreach ($p in $Wanted) {
+        $src = Join-Path $RepoRoot $p
+        if (-not (Test-Path $src)) { Die "unknown plugin '$p' (choose from: $($AllPlugins -join ', '))" }
+        Say "Installing plugin $p"
+        $dest = Join-Path $VencordDir "src\userplugins\$p"
+        if (Test-Path $dest) { Remove-Item -Recurse -Force $dest }
+        Copy-Item -Recurse $src $dest
+    }
 
     Push-Location $VencordDir
     try {
@@ -84,8 +91,9 @@ try {
 Write-Host ""
 Write-Host "Done! :3" -ForegroundColor Green
 Write-Host "1. Fully quit Discord (system tray -> Quit) and reopen it."
-Write-Host "2. Settings -> Vencord -> Plugins: turn OFF TypingTweaks, turn ON TypingVerbs."
-Write-Host "3. Click the cog next to TypingVerbs and set your verb (e.g. meowing)."
+Write-Host "2. Settings -> Vencord -> Plugins, then turn on what you want:"
+Write-Host "   - TypingVerbs: also turn OFF TypingTweaks, then click its cog and set your verb (e.g. meowing)"
+Write-Host "   - ValorantDND: DND only while VALORANT runs (turn OFF AutoDNDWhilePlaying if it's on)"
 if (Test-Path (Join-Path $env:LOCALAPPDATA "vesktop")) {
     Write-Host ""
     Write-Host "Vesktop users: Vesktop Settings -> Developer Options -> Vencord Location -> pick $VencordDir\dist"

@@ -41,6 +41,24 @@ To update, run the installer again. Vencord lives in `~/Vencord`; set `VENCORD_D
 | Fallback verb | What *you* see for people without a verb (set it to `meowing` to make everyone a cat) |
 | Role colors | Colour names by their role colour |
 
+## Bonus plugin: ValorantDND
+
+Turns on **Do Not Disturb** only while VALORANT is running, then puts your old status back when you close it. Other games don't trigger it. (Vencord's built-in AutoDNDWhilePlaying fires for *every* game.)
+
+To install only this one, on Windows (PowerShell):
+
+```powershell
+$env:PLUGINS="valorantDnd"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
+```
+
+macOS / Linux:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.sh | PLUGINS=valorantDnd bash
+```
+
+Then turn on **ValorantDND** in Settings → Vencord → Plugins, and turn off **AutoDNDWhilePlaying** if it's on. In its settings you can add more games (comma-separated, e.g. `VALORANT, Counter-Strike 2`) or pick Idle/Invisible instead of DND. If you change your status by hand mid-game, it leaves your choice alone. Discord has to detect the game, so check that VALORANT appears under Settings → Registered Games.
+
 ## How it works
 
 * The plugin hooks Discord's typing indicator, using the same patch as Vencord's built-in TypingTweaks. When someone starts typing, it asks the server for their verb (batched, cached for 5 minutes) and redraws the text.
