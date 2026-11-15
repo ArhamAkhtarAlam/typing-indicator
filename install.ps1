@@ -73,6 +73,8 @@ try {
         if ($env:SKIP_INJECT -ne "1") {
             Say "Patching Discord (pick your install if asked, then quit Discord fully when it says so)"
             Pnpm inject
+            # Vencord's installer exits 0 even when it fails
+            Write-Host "(If you saw 'Failed' above: fully quit Discord from the system tray and run this again.)" -ForegroundColor Yellow
         }
     } finally { Pop-Location }
 } finally {

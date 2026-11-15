@@ -69,6 +69,28 @@ HAS_VESKTOP=0
 if [ "${SKIP_INJECT:-0}" != 1 ]; then
     bold "==> Patching Discord (pick your install if asked, then quit Discord fully when it says so)"
     if [ -r /dev/tty ]; then pnpm inject </dev/tty; else pnpm inject; fi
+
+    # Vencord's installer exits 0 even when it fails, so check the result ourselves (macOS)
+    if [ "$(uname)" = Darwin ]; then
+        PATCHED=0; FOUND=0
+        for app in /Applications/Discord*.app "$HOME/Applications"/Discord*.app; do
+            asar="$app/Contents/Resources/app.asar"
+            [ -f "$asar" ] || continue
+            FOUND=1
+            grep -qF "$VENCORD_DIR/dist" "$asar" 2>/dev/null && PATCHED=1
+        done
+        if [ "$FOUND" = 1 ] && [ "$PATCHED" = 0 ]; then
+            echo
+            printf '\033[31m%s\033[0m\n' "Discord isn't using your new build yet. Patching it failed (probably 'operation not permitted')."
+            echo "macOS is blocking Terminal from changing apps. To fix it:"
+            echo "  1. System Settings → Privacy & Security → App Management → turn ON your terminal app"
+            echo "     (Terminal / iTerm / Claude, whichever you ran this in). Restart that app if asked."
+            echo "  2. Quit Discord (Cmd+Q), then run this installer again."
+            exit 1
+        fi
+    else
+        echo "(If you saw '❌ Failed' above, run this again with admin rights or close Discord first.)"
+    fi
 fi
 
 echo
