@@ -27,9 +27,10 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Die "Node.js is not
 $nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
 if ($nodeMajor -lt 22) { Die "Node.js $nodeMajor is too old, Vencord needs v22+. Update from https://nodejs.org" }
 
-$UsePnpm = [bool](Get-Command pnpm -ErrorAction SilentlyContinue)
+# use the .cmd shims: the .ps1 ones are blocked when PowerShell script execution is disabled (the default)
+$UsePnpm = [bool](Get-Command pnpm.cmd -ErrorAction SilentlyContinue)
 function Pnpm {
-    if ($UsePnpm) { Run pnpm @args } else { Run npx --yes pnpm @args }
+    if ($UsePnpm) { Run pnpm.cmd @args } else { Run npx.cmd --yes pnpm @args }
 }
 
 # ---------- get plugin source ----------
