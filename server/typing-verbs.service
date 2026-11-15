@@ -1,0 +1,18 @@
+# systemd *user* service (no sudo needed).
+#   mkdir -p ~/typing-verbs ~/.config/systemd/user
+#   cp typing_verbs_server.py ~/typing-verbs/
+#   cp typing-verbs.service ~/.config/systemd/user/
+#   systemctl --user daemon-reload && systemctl --user enable --now typing-verbs
+#   sudo loginctl enable-linger $USER    # once, so it keeps running when you're logged out
+[Unit]
+Description=TypingVerbs server (custom Discord typing verbs)
+After=network-online.target
+
+[Service]
+WorkingDirectory=%h/typing-verbs
+ExecStart=/usr/bin/python3 %h/typing-verbs/typing_verbs_server.py --host 127.0.0.1 --port 8787 --trust-proxy
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
