@@ -11,6 +11,7 @@
  */
 
 import { isPluginEnabled } from "@api/PluginManager";
+import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { debounce } from "@shared/debounce";
@@ -19,8 +20,8 @@ import { isNonNullish } from "@utils/guards";
 import { Logger } from "@utils/Logger";
 import { useForceUpdater } from "@utils/react";
 import definePlugin, { OptionType, PluginNative } from "@utils/types";
-import { Channel, User } from "@vencord/discord-types";
-import { AuthenticationStore, GuildMemberStore, React, RelationshipStore, showToast, TypingStore, UserStore, useStateFromStores } from "@webpack/common";
+import { Channel, RenderModalProps, User } from "@vencord/discord-types";
+import { AuthenticationStore, GuildMemberStore, Menu, Modal, openModal, React, RelationshipStore, showToast, TextInput, TypingStore, UserStore, useStateFromStores } from "@webpack/common";
 
 const Native = VencordNative.pluginHelpers.TypingVerbs as PluginNative<typeof import("./native")>;
 const logger = new Logger("TypingVerbs");
@@ -66,8 +67,71 @@ const settings = definePluginSettings({
         description: "Secret that proves this account's verb belongs to you. Don't share it.",
         default: "",
         hidden: true
+    },
+    localVerbs: {
+        // userId -> verb. Set by right-clicking someone. Only you see these, they beat the server's verb.
+        type: OptionType.CUSTOM,
+        default: {} as Record<string, string>
     }
 });
+
+/* ---------------- verbs only you see (right-click → Set typing verb) ---------------- */
+
+function setLocalVerb(userId: string, verb: string | null) {
+    const next = { ...settings.store.localVerbs };
+    if (verb) next[userId] = verb;
+    else delete next[userId];
+    settings.store.localVerbs = next; // reassign so the typing indicator re-renders
+}
+
+function LocalVerbModal({ user, modalProps }: { user: User; modalProps: RenderModalProps; }) {
+    const existing = settings.store.localVerbs[user.id] ?? "";
+    const [value, setValue] = React.useState(existing);
+    const verb = cleanVerb(value);
+    const valid = !verb || VERB_RE.test(verb);
+
+    const save = () => {
+        if (!valid) return;
+        setLocalVerb(user.id, verb || null);
+        modalProps.onClose();
+    };
+
+    return (
+        <Modal
+            {...modalProps}
+            size="sm"
+            title={`Typing verb for ${(user as any).globalName || user.username}`}
+            subtitle="Only you see this. It works even if they don't have the plugin, and beats the verb they picked."
+            notice={valid ? undefined : { message: "1–32 letters, numbers or spaces", type: "critical" }}
+            actions={[
+                ...(existing ? [{ text: "Remove", variant: "secondary", onClick: () => { setLocalVerb(user.id, null); modalProps.onClose(); } }] : []),
+                { text: "Save", variant: "primary", onClick: save, disabled: !valid }
+            ]}
+        >
+            <form onSubmit={e => { e.preventDefault(); save(); }}>
+                <TextInput
+                    autoFocus
+                    value={value}
+                    placeholder="meowing"
+                    onChange={(v: string) => setValue(v)}
+                />
+            </form>
+        </Modal>
+    );
+}
+
+const UserContext: NavContextMenuPatchCallback = (children, { user }: { user?: User; }) => {
+    if (!user || user.id === AuthenticationStore.getId()) return;
+    const current = settings.store.localVerbs[user.id];
+
+    children.push(
+        <Menu.MenuItem
+            id="vc-typing-verbs-local"
+            label={current ? `Typing verb: ${current} (only you see it)` : "Set typing verb (only you see it)"}
+            action={() => openModal(props => <LocalVerbModal user={user} modalProps={props} />)}
+        />
+    );
+};
 
 /* ---------------- verb cache (batched lookups) ---------------- */
 
@@ -190,11 +254,13 @@ function joinNodes(nodes: React.ReactNode[]) {
 
 const TypingText = ErrorBoundary.wrap(function TypingText({ users, guildId, children }: { users: User[]; guildId?: string; children: React.ReactNode; }) {
     const verbs = useVerbs(users.map(u => u.id));
+    const { localVerbs } = settings.use(["localVerbs"]);
     const fallback = cleanVerb(settings.store.fallbackVerb || "typing") || "typing";
 
     if (!users.length) return <>{children}</>;
 
-    const resolved = verbs.map(v => v ?? fallback);
+    // your private override > their own verb from the server > fallback
+    const resolved = verbs.map((v, i) => localVerbs[users[i].id] ?? v ?? fallback);
     // nobody has a custom verb and the fallback is plain "typing" → leave Discord's text alone
     if (resolved.every(v => v === "typing")) return <>{children}</>;
 
@@ -226,6 +292,10 @@ export default definePlugin({
     description: "Replace \"is typing...\" with a custom verb like \"is meowing...\", synced with friends through your own server",
     authors: [{ name: "typing-indicator", id: 0n }],
     settings,
+
+    contextMenus: {
+        "user-context": UserContext
+    },
 
     patches: [
         {
