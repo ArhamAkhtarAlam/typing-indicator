@@ -59,6 +59,20 @@ curl -fsSL https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/ma
 
 Then turn on **ValorantDND** in Settings → Vencord → Plugins, and turn off **AutoDNDWhilePlaying** if it's on. In its settings you can add more games (comma-separated, e.g. `VALORANT, Counter-Strike 2`) or pick Idle/Invisible instead of DND. If you change your status by hand mid-game, it leaves your choice alone. Discord has to detect the game, so check that VALORANT appears under Settings → Registered Games.
 
+## Keeping it working after Discord updates (Windows)
+
+Discord updates remove Vencord. `tools/discord_plugins.py` checks every day and when you log in, pops up a message if something broke, and puts a **Fix Discord** button on your desktop. The fix updates Vencord and your plugins, rebuilds, puts Vencord back into Discord and restarts it. If an update breaks the build or one of the plugins you use, it goes back to the last versions that worked.
+
+You need [Python 3](https://www.python.org/downloads/) (tick "Add python.exe to PATH" when installing). Then in PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/tools/discord_plugins.py -OutFile "$env:TEMP\discord_plugins.py"; py "$env:TEMP\discord_plugins.py" setup
+```
+
+Run that once your plugins are switched on the way you like. It remembers which ones you use. Afterwards, whenever Discord updates, double-click **Fix Discord** on your desktop.
+
+Other commands (`py "$env:LOCALAPPDATA\discord-plugins\discord_plugins.py" <command>`): `status`, `check`, `fix`, `save` (remember plugins you switched on since), `remove` (stop the daily check).
+
 ## How it works
 
 * The plugin hooks Discord's typing indicator, using the same patch as Vencord's built-in TypingTweaks. When someone starts typing, it asks the server for their verb (batched, cached for 5 minutes) and redraws the text.
