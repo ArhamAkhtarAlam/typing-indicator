@@ -45,6 +45,16 @@ To update, run the installer again. Vencord lives in `~/Vencord`; set `VENCORD_D
 
 Every message you send has a 1% chance of getting uwuified ("Hello I really love this" becomes "Hewwo I weawwy wuv dis owo"). Links, mentions, emojis and code are left alone. You can change the chance and turn the faces off in its settings.
 
+## Bonus plugin: AutoMeow
+
+Adds a paw button to the chat bar. Click it to keep meowing in that channel every minute or so (meow, mrow, maiw, meuw, miau...; sometimes mrrrp, nya~ or *purrs*). Click again to stop. Right-click it to meow once. The gap, a stop-after count and how often the rare ones show up are in its settings.
+
+Windows, this plugin only:
+
+```powershell
+$env:PLUGINS="autoMeow"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
+```
+
 ## Bonus plugin: ValorantDND
 
 Turns on **Do Not Disturb** only while VALORANT is running, then puts your old status back when you close it. Other games don't trigger it. (Vencord's built-in AutoDNDWhilePlaying fires for *every* game.)
