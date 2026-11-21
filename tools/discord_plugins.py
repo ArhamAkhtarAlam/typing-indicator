@@ -35,7 +35,7 @@ if os.environ.get("DISCORD_DIR"):
 UP = VC_DIR / "src" / "userplugins"
 RENDERER = VC_DIR / "dist" / "renderer.js"
 PLUGIN_REPO = "https://github.com/ArhamAkhtarAlam/typing-indicator.git"
-REPO_PLUGINS = ["typingVerbs", "valorantDnd"]
+REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu"]
 TASK = "DiscordPluginCheck"
 IS_WIN = os.name == "nt"
 NO_WINDOW = 0x08000000 if IS_WIN else 0
@@ -359,6 +359,15 @@ def fix():
         print(f"\nDone! All {len(saved_plugins())} plugins you use are working.")
 
 
+def remember_new_plugins():
+    """plugins switched on since the last save (and working now) get looked after too"""
+    if not RENDERER.exists() or not (STATE / "plugins.txt").exists():
+        return
+    new = working_enabled() - saved_plugins()
+    if new:
+        (STATE / "plugins.txt").write_text("\n".join(sorted(saved_plugins() | new)) + "\n")
+
+
 # ---------- scheduling ----------
 
 def setup():
@@ -405,6 +414,7 @@ def main():
         elif cmd == "check":
             if "--wait" in sys.argv:
                 time.sleep(int(sys.argv[sys.argv.index("--wait") + 1]))
+            remember_new_plugins()
             p = problems()
             if p:
                 popup("\n".join(p) + "\n\nDouble-click 'Fix Discord' on your desktop to put it all back.",

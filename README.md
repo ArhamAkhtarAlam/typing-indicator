@@ -41,6 +41,10 @@ To update, run the installer again. Vencord lives in `~/Vencord`; set `VENCORD_D
 | Fallback verb | What *you* see for people without a verb (set it to `meowing` to make everyone a cat) |
 | Role colors | Colour names by their role colour |
 
+## Bonus plugin: RandomUwU
+
+Every message you send has a 1% chance of getting uwuified ("Hello I really love this" becomes "Hewwo I weawwy wuv dis owo"). Links, mentions, emojis and code are left alone. You can change the chance and turn the faces off in its settings.
+
 ## Bonus plugin: ValorantDND
 
 Turns on **Do Not Disturb** only while VALORANT is running, then puts your old status back when you close it. Other games don't trigger it. (Vencord's built-in AutoDNDWhilePlaying fires for *every* game.)
@@ -61,17 +65,16 @@ Then turn on **ValorantDND** in Settings → Vencord → Plugins, and turn off *
 
 ## Keeping it working after Discord updates (Windows)
 
-Discord updates remove Vencord. `tools/discord_plugins.py` checks every day and when you log in, pops up a message if something broke, and puts a **Fix Discord** button on your desktop. The fix updates Vencord and your plugins, rebuilds, puts Vencord back into Discord and restarts it. If an update breaks the build or one of the plugins you use, it goes back to the last versions that worked.
+Discord updates remove Vencord. If [Python 3](https://www.python.org/downloads/) is installed (tick "Add python.exe to PATH"), the Windows installer also sets up `tools/discord_plugins.py`:
 
-You need [Python 3](https://www.python.org/downloads/) (tick "Add python.exe to PATH" when installing). Then in PowerShell:
+* It checks every day at 6pm and a couple of minutes after you log in, and pops up a message if Discord updated or a plugin stopped working.
+* It puts a **Fix Discord** button on your desktop. Double-clicking it updates Vencord and your plugins, rebuilds, puts Vencord back into Discord and restarts it.
+* If an update breaks the build or one of the plugins you use, it goes back to the last versions that worked.
+* Plugins you switch on later are remembered automatically.
 
-```powershell
-irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/tools/discord_plugins.py -OutFile "$env:TEMP\discord_plugins.py"; py "$env:TEMP\discord_plugins.py" setup
-```
+If you didn't have Python when you installed, install it and run the installer again. To skip this part, set `$env:SKIP_AUTOFIX="1"`.
 
-Run that once your plugins are switched on the way you like. It remembers which ones you use. Afterwards, whenever Discord updates, double-click **Fix Discord** on your desktop.
-
-Other commands (`py "$env:LOCALAPPDATA\discord-plugins\discord_plugins.py" <command>`): `status`, `check`, `fix`, `save` (remember plugins you switched on since), `remove` (stop the daily check).
+Other commands (`py "$env:LOCALAPPDATA\discord-plugins\discord_plugins.py" <command>`): `status`, `check`, `fix`, `save`, `remove` (stop the daily check).
 
 ## How it works
 

@@ -1,4 +1,5 @@
-# Vencord plugin installer for Windows (TypingVerbs + ValorantDND).
+# Vencord plugin installer for Windows (TypingVerbs + ValorantDND + RandomUwU),
+# plus a daily check + 'Fix Discord' button for after Discord updates (needs Python).
 #   irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
 # Re-run it any time to update Vencord + the plugin.
 #
@@ -6,6 +7,7 @@
 #   $env:VENCORD_DIR = "$HOME\Vencord"   where the Vencord source build lives
 #   $env:SKIP_INJECT = "1"               build only, don't patch Discord (e.g. you use Vesktop)
 #   $env:PLUGINS = "valorantDnd"         only install these plugin folders (default: all of them)
+#   $env:SKIP_AUTOFIX = "1"              don't set up the daily check / Fix Discord button
 
 $ErrorActionPreference = "Stop"
 
@@ -59,7 +61,7 @@ try {
     }
 
     # ---------- copy plugin + build ----------
-    $AllPlugins = @("typingVerbs", "valorantDnd")
+    $AllPlugins = @("typingVerbs", "valorantDnd", "randomUwu")
     $Wanted = if ($env:PLUGINS) { $env:PLUGINS -split "[ ,]+" | Where-Object { $_ } } else { $AllPlugins }
     New-Item -ItemType Directory -Force -Path (Join-Path $VencordDir "src\userplugins") | Out-Null
     foreach ($p in $Wanted) {
@@ -85,6 +87,24 @@ try {
             Write-Host "(If you saw 'Failed' above: fully quit Discord from the system tray and run this again.)" -ForegroundColor Yellow
         }
     } finally { Pop-Location }
+
+    # ---------- auto-fix after Discord updates ----------
+    # Windows has a fake "python" that just opens the Microsoft Store, so check that it really runs
+    $Python = $null
+    foreach ($c in @("py", "python", "python3")) {
+        if (Get-Command $c -ErrorAction SilentlyContinue) {
+            & $c -c "import sys; sys.exit(0 if sys.version_info >= (3, 9) else 1)" 2>$null
+            if ($LASTEXITCODE -eq 0) { $Python = $c; break }
+        }
+    }
+    $AutoFix = $false
+    if ($env:SKIP_AUTOFIX -eq "1") {
+        # skipped on purpose
+    } elseif ($Python) {
+        Say "Setting up the daily check + 'Fix Discord' desktop button"
+        & $Python (Join-Path $RepoRoot "tools\discord_plugins.py") setup
+        $AutoFix = ($LASTEXITCODE -eq 0)
+    }
 } finally {
     if ($Tmp -and (Test-Path $Tmp)) { Remove-Item -Recurse -Force $Tmp -ErrorAction SilentlyContinue }
 }
@@ -95,9 +115,23 @@ Write-Host "1. Fully quit Discord (system tray -> Quit) and reopen it."
 Write-Host "2. Settings -> Vencord -> Plugins, then turn on what you want:"
 Write-Host "   - TypingVerbs: also turn OFF TypingTweaks, then click its cog and set your verb (e.g. meowing)"
 Write-Host "   - ValorantDND: DND only while VALORANT runs (turn OFF AutoDNDWhilePlaying if it's on)"
+Write-Host "   - RandomUwU: 1% of your messages get uwuified (change the chance in its cog)"
 if (Test-Path (Join-Path $env:LOCALAPPDATA "vesktop")) {
     Write-Host ""
     Write-Host "Vesktop users: Vesktop Settings -> Developer Options -> Vencord Location -> pick $VencordDir\dist"
+}
+Write-Host ""
+if ($AutoFix) {
+    Write-Host "Discord updates remove Vencord. When that happens:" -ForegroundColor Cyan
+    Write-Host "   - you get a popup (it checks every day at 6pm and when you log in)"
+    Write-Host "   - double-click 'Fix Discord' on your desktop and it puts everything back + restarts Discord"
+    Write-Host "   Plugins you turn on later are remembered automatically."
+} elseif ($env:SKIP_AUTOFIX -ne "1") {
+    Write-Host "To make it fix itself after Discord updates (recommended):" -ForegroundColor Yellow
+    Write-Host "   1. Install Python from https://www.python.org/downloads/"
+    Write-Host "      and TICK 'Add python.exe to PATH' on the first screen of the installer"
+    Write-Host "   2. Close this window, open a new PowerShell and run this installer again"
+    Write-Host "   You'll then get a 'Fix Discord' button on your desktop and a popup when Discord updates."
 }
 Write-Host ""
 Write-Host "To update later, just run this installer again."
