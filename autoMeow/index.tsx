@@ -8,7 +8,25 @@ import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { ChannelStore } from "@webpack/common";
 
+const DEFAULT_MEOWS = "meow, mew, miau, maio, mrow, meiw, maiw, meuw, miaw, mraow, mreow, meo, mjau, miao, mau, mrrow, mewo, maow, miu, mewww, meowr";
+const DEFAULT_RARE = "mrrrp, mrrp, mrp?, prrrt, purrr, nya, nya~, nyaa, nyan, mrrrow, brrrp, prrrp?, :3, nyaaa~, mrrrrp :3, *purrs*, *headbutts you*";
+
 const settings = definePluginSettings({
+    meows: {
+        type: OptionType.STRING,
+        description: "Normal meows, separated by commas. Add your own variations!",
+        default: DEFAULT_MEOWS,
+    },
+    rare: {
+        type: OptionType.STRING,
+        description: "Rare ones (mrrrp, nya, purrs...), separated by commas",
+        default: DEFAULT_RARE,
+    },
+    stretch: {
+        type: OptionType.BOOLEAN,
+        description: "Randomly stretch, shout and decorate them (meeeow, MEOW, mrow~)",
+        default: true,
+    },
     rareChance: {
         type: OptionType.NUMBER,
         description: "Chance (in %) of a rare one like mrrrp or nya instead of a meow",
@@ -21,14 +39,11 @@ const rand = (n: number) => Math.floor(Math.random() * n);
 const pick = <T,>(a: T[]) => a[rand(a.length)];
 const chance = (p: number) => Math.random() < p;
 
-const MEOWS = [
-    "meow", "mew", "miau", "maio", "mrow", "meiw", "maiw", "meuw", "miaw", "mraow", "mreow",
-    "meo", "mjau", "miao", "mau", "meow", "mrrow", "mewo", "maow", "miu", "mewww", "meowr",
-];
-const RARE = [
-    "mrrrp", "mrrp", "mrp?", "prrrt", "purrr", "nya", "nya~", "nyaa", "nyan", "mrrrow",
-    "brrrp", "prrrp?", ":3", "nyaaa~", "mrrrrp :3", "*purrs*", "*headbutts you*",
-];
+
+// your lists from the settings (comma-separated), or the defaults if you emptied one
+const list = (txt: string, fallback: string) =>
+    (txt.split(",").map(w => w.trim()).filter(Boolean).length ? txt : fallback)
+        .split(",").map(w => w.trim()).filter(Boolean);
 
 // stretch one letter: meow -> meeeow, mrrp -> mrrrrrp
 function stretch(w: string) {
@@ -40,11 +55,14 @@ function stretch(w: string) {
 
 export function meow() {
     const rare = chance(settings.store.rareChance / 100);
-    let w = rare ? pick(RARE) : pick(MEOWS);
-    if (chance(0.35)) w = stretch(w);
-    if (!rare && chance(0.2)) w = `${w} ${pick(MEOWS)}`;        // meow mrow
-    if (chance(0.12)) w = w.toUpperCase();                       // MEOW
-    if (chance(0.3)) w += pick(["~", "!", "?", " :3", "!!", "~~", " >w<"]);
+    const MEOWS = list(settings.store.meows, DEFAULT_MEOWS);
+    const RARE = list(settings.store.rare, DEFAULT_RARE);
+    let w = rare && RARE.length ? pick(RARE) : pick(MEOWS);
+    const fx = settings.store.stretch;
+    if (fx && chance(0.35)) w = stretch(w);
+    if (fx && !rare && chance(0.2)) w = `${w} ${pick(MEOWS)}`;        // meow mrow
+    if (fx && chance(0.12)) w = w.toUpperCase();                       // MEOW
+    if (fx && chance(0.3)) w += pick(["~", "!", "?", " :3", "!!", "~~", " >w<"]);
     return w;
 }
 

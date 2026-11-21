@@ -47,7 +47,7 @@ Every message you send has a 1% chance of getting uwuified ("Hello I really love
 
 ## Bonus plugin: AutoMeow
 
-Adds a paw button to the chat bar. Every click sends a meow (meow, mrow, maiw, meuw, miau...; sometimes mrrrp, nya~ or *purrs*), so you can spam-click it. How often the rare ones show up is in its settings.
+Adds a paw button to the chat bar. Every click sends a meow (meow, mrow, maiw, meuw, miau...; sometimes mrrrp, nya~ or *purrs*), so you can spam-click it. In its settings you can edit both lists (comma-separated) to add your own variations, change how often the rare ones show up, and turn off the random stretching (meeeow, MEOW, mrow~).
 
 Windows, this plugin only:
 
