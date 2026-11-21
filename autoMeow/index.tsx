@@ -1,26 +1,14 @@
 /*
- * AutoMeow: a paw button in the chat bar.
- *   click        -> start / stop meowing in this channel every so often
- *   right-click  -> send one meow right now
+ * AutoMeow: a paw button in the chat bar. Every click sends a meow (or mrow, maiw, mrrrp, nya...).
  */
 
 import { ChatBarButton } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, showToast, useEffect, useState } from "@webpack/common";
+import { ChannelStore } from "@webpack/common";
 
 const settings = definePluginSettings({
-    interval: {
-        type: OptionType.NUMBER,
-        description: "Seconds between meows (randomised a bit, minimum 5)",
-        default: 60,
-    },
-    maxMeows: {
-        type: OptionType.NUMBER,
-        description: "Stop by itself after this many meows (0 = never)",
-        default: 0,
-    },
     rareChance: {
         type: OptionType.NUMBER,
         description: "Chance (in %) of a rare one like mrrrp or nya instead of a meow",
@@ -60,48 +48,10 @@ export function meow() {
     return w;
 }
 
-// ---------- auto meowing ----------
-interface Run { timer: any; sent: number; }
-const running = new Map<string, Run>();
-const listeners = new Set<() => void>();
-const changed = () => listeners.forEach(f => f());
-
-function schedule(channelId: string) {
-    const run = running.get(channelId);
-    if (!run) return;
-    const base = Math.max(5, settings.store.interval) * 1000;
-    const delay = base * (0.7 + Math.random() * 0.6);
-    run.timer = setTimeout(() => {
-        if (!running.has(channelId)) return;
-        sendMessage(channelId, { content: meow() });
-        run.sent++;
-        const max = settings.store.maxMeows;
-        if (max > 0 && run.sent >= max) stop(channelId, `Done meowing (${run.sent} meows)`);
-        else schedule(channelId);
-    }, delay);
-}
-
-function start(channelId: string) {
-    running.set(channelId, { timer: null, sent: 0 });
-    sendMessage(channelId, { content: meow() });
-    running.get(channelId)!.sent = 1;
-    schedule(channelId);
-    changed();
-    showToast({ text: "Auto-meowing here. Click the paw again to stop." });
-}
-
-function stop(channelId: string, msg = "Stopped meowing") {
-    const run = running.get(channelId);
-    if (run) clearTimeout(run.timer);
-    running.delete(channelId);
-    changed();
-    showToast({ text: msg });
-}
-
 // ---------- button ----------
-function PawIcon({ active }: { active: boolean; }) {
+function PawIcon() {
     return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill={active ? "var(--status-positive)" : "currentColor"}>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
             <ellipse cx="6" cy="9" rx="2.2" ry="2.8" />
             <ellipse cx="10" cy="5.5" rx="2.2" ry="2.8" />
             <ellipse cx="14" cy="5.5" rx="2.2" ry="2.8" />
@@ -111,44 +61,21 @@ function PawIcon({ active }: { active: boolean; }) {
     );
 }
 
-const AutoMeowButton = ({ channelId }: { channelId: string; }) => {
-    const [, force] = useState(0);
-    useEffect(() => {
-        const f = () => force(n => n + 1);
-        listeners.add(f);
-        return () => void listeners.delete(f);
-    }, []);
-    const active = running.has(channelId);
-
-    return (
-        <ChatBarButton
-            tooltip={active ? "Stop meowing" : "Auto meow (right-click: meow once)"}
-            onClick={() => active ? stop(channelId) : start(channelId)}
-            onContextMenu={e => {
-                e.preventDefault();
-                sendMessage(channelId, { content: meow() });
-            }}
-        >
-            <PawIcon active={active} />
-        </ChatBarButton>
-    );
-};
-
 export default definePlugin({
     name: "AutoMeow",
-    description: "Adds a paw button to the chat bar: click to keep meowing (meow, mrow, maiw, mrrrp, nya...) every so often, right-click to meow once",
+    description: "Adds a paw button to the chat bar: every click sends a meow (meow, mrow, maiw, meuw, mrrrp, nya...)",
     authors: [{ name: "Arham", id: 0n }],
     settings,
 
     chatBarButton: {
-        icon: () => <PawIcon active={false} />,
+        icon: PawIcon,
         render: ({ channel, isMainChat }) => {
             if (!isMainChat || !ChannelStore.getChannel(channel.id)) return null;
-            return <AutoMeowButton channelId={channel.id} />;
+            return (
+                <ChatBarButton tooltip="Meow" onClick={() => sendMessage(channel.id, { content: meow() })}>
+                    <PawIcon />
+                </ChatBarButton>
+            );
         },
-    },
-
-    stop() {
-        for (const id of [...running.keys()]) stop(id);
     },
 });
