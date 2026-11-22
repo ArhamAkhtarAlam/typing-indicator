@@ -3,15 +3,16 @@
  *   click        -> send a meow (or a woof, yip, tweet... depending on the mode)
  *   hold         -> combo: one message with a burst (meow meow MEOW mrrrp!)
  *   right-click  -> switch mode (cat, dog, fox, bird, mixed)
- * Plus a translator (translator.tsx): the speech-bubble button (or !cat / !dog / !fox / !bird) sends your
- * message in animal language, and anyone else with AutoMeow sees the real message under it.
+ * Plus a translator (translator.tsx): with a message typed in the chat box, clicking the paw sends it in
+ * animal language (so does starting it with !cat / !dog / !fox / !bird), and anyone else with AutoMeow
+ * sees the real message under it.
  */
 
-import { addChatBarButton, ChatBarButton, removeChatBarButton } from "@api/ChatButtons";
+import { ChatBarButton } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, showToast, useRef } from "@webpack/common";
+import { ChannelStore, ComponentDispatch, DraftStore, DraftType, showToast, useRef, useStateFromStores } from "@webpack/common";
 
 import { Animal as LangAnimal, ANIMALS as LANGS, encode, MAX_LEN, NAME, Translation } from "./translator";
 
@@ -68,17 +69,12 @@ const settings = definePluginSettings({
     },
     speakAll: {
         type: OptionType.BOOLEAN,
-        description: "Translator: send every message in animal language, using the current mode (same as clicking the speech-bubble button)",
+        description: "Translator: send every message in animal language, using the current mode (normally only the paw or !cat does that)",
         default: false,
     },
     showTranslations: {
         type: OptionType.BOOLEAN,
         description: "Translator: show the real message under animal-language messages",
-        default: true,
-    },
-    fakeTranslations: {
-        type: OptionType.BOOLEAN,
-        description: "Translator: show a made-up translation under normal meows, woofs, yips and tweets",
         default: true,
     },
     // cat keeps its old setting names so lists you already edited stay
@@ -160,15 +156,39 @@ function PawIcon() {
     );
 }
 
+const nextMode = (m: Mode) => {
+    const next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
+    settings.store.mode = next;
+    showToast({ text: `${LABELS[next]} mode` });
+};
+const langOf = (m: Mode): LangAnimal => m === "mixed" ? pick(LANGS) : m;
+const draftOf = (channelId: string) => (DraftStore.getDraft(channelId, DraftType.ChannelMessage) ?? "").trim();
+
+// paw click with something typed in the chat box: send that in animal language instead of a meow
+function sendTranslated(channelId: string, m: Mode, text: string) {
+    const animal = langOf(m);
+    const out = encode(text, animal);
+    if (out.length > MAX_LEN) {
+        showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 300 letters max)` });
+        return;
+    }
+    // goes straight to Discord: RandomUwU and the speak-everything setting don't touch it again
+    sendMessage(channelId, { content: out });
+    ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
+}
+
 function MeowButton({ channelId }: { channelId: string; }) {
     const { mode } = settings.use(["mode"]);
     const m: Mode = MODES.includes(mode) ? mode : "cat";
+    const typed = useStateFromStores([DraftStore], () => !!draftOf(channelId));
     const hold = useRef<{ timer: any; fired: boolean; }>({ timer: null, fired: false });
     const cancel = () => clearTimeout(hold.current.timer);
 
     return (
         <ChatBarButton
-            tooltip={`${LABELS[m]} (hold for a combo, right-click to switch)`}
+            tooltip={typed
+                ? `Send your message in ${LABELS[m]} language`
+                : `${LABELS[m]} (hold for a combo, right-click to switch)`}
             buttonProps={{
                 onPointerDown: e => {
                     if (e.button !== 0) return;
@@ -185,7 +205,9 @@ function MeowButton({ channelId }: { channelId: string; }) {
             onClick={() => {
                 cancel();
                 if (hold.current.fired) { hold.current.fired = false; return; }   // the hold already sent a combo
-                sendMessage(channelId, { content: sound(m) });
+                const text = draftOf(channelId);
+                if (text) sendTranslated(channelId, m, text);
+                else sendMessage(channelId, { content: sound(m) });
             }}
             onContextMenu={e => { e.preventDefault(); nextMode(m); }}
         >
@@ -194,59 +216,11 @@ function MeowButton({ channelId }: { channelId: string; }) {
     );
 }
 
-// ---------- translator ----------
-const nextMode = (m: Mode) => {
-    const next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
-    settings.store.mode = next;
-    showToast({ text: `${LABELS[next]} mode` });
-};
-const langOf = (m: Mode): LangAnimal => m === "mixed" ? pick(LANGS) : m;
-
-function BubbleIcon({ on }: { on?: boolean; }) {
-    return (
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={on ? { color: "var(--brand-500, #5865f2)" } : undefined}>
-            <path d="M4 3h16a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2h-7l-5 4v-4H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2z" />
-            <circle cx="8" cy="9" r="1.3" fill="var(--background-primary, #000)" />
-            <circle cx="16" cy="9" r="1.3" fill="var(--background-primary, #000)" />
-            <path d="M9.5 12c.8.8 1.6.8 2.5 0 .9.8 1.7.8 2.5 0" stroke="var(--background-primary, #000)" strokeWidth="1.2" fill="none" strokeLinecap="round" />
-        </svg>
-    );
-}
-
-function SpeakButton() {
-    const { speakAll, mode } = settings.use(["speakAll", "mode"]);
-    const m: Mode = MODES.includes(mode) ? mode : "cat";
-    return (
-        <ChatBarButton
-            tooltip={`${LABELS[m]} language: ${speakAll ? "ON" : "off"} (right-click to switch)`}
-            onClick={() => {
-                settings.store.speakAll = !speakAll;
-                showToast({ text: `${LABELS[m]} language ${!speakAll ? "on" : "off"}` });
-            }}
-            onContextMenu={e => { e.preventDefault(); nextMode(m); }}
-        >
-            <BubbleIcon on={speakAll} />
-        </ChatBarButton>
-    );
-}
-
-const SPEAK_ID = "AutoMeowTranslator";
-
 export default definePlugin({
     name: "AutoMeow",
-    description: "Adds a paw button to the chat bar: every click sends a meow (or woof, yip, tweet...), hold it for a combo, right-click to switch animal. The speech-bubble button sends your messages in animal language, and friends with AutoMeow see the real text",
+    description: "Adds a paw button to the chat bar: click it to send a meow (or woof, yip, tweet...), hold it for a combo, right-click to switch animal. If you've typed a message, the paw sends it in animal language instead, and friends with AutoMeow see the real text",
     authors: [{ name: "Arham", id: 0n }],
     settings,
-
-    start() {
-        addChatBarButton(SPEAK_ID, ({ channel, isMainChat }) => {
-            if (!isMainChat || !ChannelStore.getChannel(channel.id)) return null;
-            return <SpeakButton />;
-        }, () => <BubbleIcon />);
-    },
-    stop() {
-        removeChatBarButton(SPEAK_ID);
-    },
 
     onBeforeMessageSend(_channelId, msg) {
         const content = msg.content;
@@ -262,7 +236,7 @@ export default definePlugin({
 
         const out = encode(text, animal);
         if (out.length > MAX_LEN) {
-            showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 350 letters max), sent it normally` });
+            showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 300 letters max), sent it normally` });
             msg.content = text;
             return;
         }
@@ -271,7 +245,7 @@ export default definePlugin({
     },
 
     renderMessageAccessory: ({ message }) => (
-        <Translation message={message} real={settings.store.showTranslations} fake={settings.store.fakeTranslations} />
+        settings.store.showTranslations ? <Translation message={message} /> : null
     ),
 
     chatBarButton: {
