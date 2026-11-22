@@ -116,7 +116,7 @@ Write-Host "2. Settings -> Vencord -> Plugins, then turn on what you want:"
 Write-Host "   - TypingVerbs: also turn OFF TypingTweaks, then click its cog and set your verb (e.g. meowing)"
 Write-Host "   - ValorantDND: DND only while VALORANT runs (turn OFF AutoDNDWhilePlaying if it's on)"
 Write-Host "   - RandomUwU: 1% of your messages get uwuified (change the chance in its cog)"
-Write-Host "   - AutoMeow: paw button in the chat bar, every click sends a meow"
+Write-Host "   - AutoMeow: paw button in the chat bar, every click sends a meow (right-click: dog/fox/bird mode)"
 if (Test-Path (Join-Path $env:LOCALAPPDATA "vesktop")) {
     Write-Host ""
     Write-Host "Vesktop users: Vesktop Settings -> Developer Options -> Vencord Location -> pick $VencordDir\dist"

@@ -1,51 +1,92 @@
 /*
- * AutoMeow: a paw button in the chat bar. Every click sends a meow (or mrow, maiw, mrrrp, nya...).
+ * AutoMeow: a paw button in the chat bar.
+ *   click        -> send a meow (or a woof, yip, tweet... depending on the mode)
+ *   right-click  -> switch mode (cat, dog, fox, bird, mixed)
  */
 
 import { ChatBarButton } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore } from "@webpack/common";
+import { ChannelStore, showToast } from "@webpack/common";
 
-const DEFAULT_MEOWS = "meow, mew, miau, maio, mrow, meiw, maiw, meuw, miaw, mraow, mreow, meo, mjau, miao, mau, mrrow, mewo, maow, miu, mewww, meowr";
-const DEFAULT_RARE = "mrrrp, mrrp, mrp?, prrrt, purrr, nya, nya~, nyaa, nyan, mrrrow, brrrp, prrrp?, :3, nyaaa~, mrrrrp :3, *purrs*, *headbutts you*";
+const DEFAULTS = {
+    cat: {
+        normal: "meow, mew, miau, maio, mrow, meiw, maiw, meuw, miaw, mraow, mreow, meo, mjau, miao, mau, mrrow, mewo, maow, miu, mewww, meowr",
+        rare: "mrrrp, mrrp, mrp?, prrrt, purrr, nya, nya~, nyaa, nyan, mrrrow, brrrp, prrrp?, :3, nyaaa~, mrrrrp :3, *purrs*, *headbutts you*",
+    },
+    dog: {
+        normal: "ruff, woof, barks, arf, roof, ruf, awoo, grr, :>, wou, wouf, bork, bourf, wruff, o.o, gruff, owo, (ᵔᴥᵔ), boof, yap, aroo, bork bork",
+        rare: "ruf ruf?, hwoof, hruff, wuff, arff, ruffles, wauf, wroof, woofies, ૮ ・ﻌ・ა, ▽・ᴥ・▽, >:3, U・ᴥ・U, *wags tail*, *zoomies*, *sniffs you*, *rolls over*, *steals your sock*",
+    },
+    fox: {
+        normal: "yip, yap, yipyip, ack, eep, ehehe, wah, kyuu, kon, heh, awoo, yiip, ack ack, hehe",
+        rare: "AAAAAA, *screams*, *pounces*, kon kon~, (^・ω・^ ), *chitters*, *wags tail*, *steals your shoe*, *dives into the snow*",
+    },
+    bird: {
+        normal: "tweet, chirp, cheep, peep, tweet tweet, chirrup, coo, squawk, trill, kaw, cheep cheep, pip",
+        rare: "*flaps wings*, *steals your fries*, (•ө•)♡, SKREEEE, *head tilt*, bwak?, *sits on your head*, *drops a feather*",
+    },
+};
+type Animal = keyof typeof DEFAULTS;
+const ANIMALS = Object.keys(DEFAULTS) as Animal[];
+const MODES = [...ANIMALS, "mixed"] as const;
+type Mode = typeof MODES[number];
+const LABELS: Record<Mode, string> = { cat: "🐱 Cat", dog: "🐶 Dog", fox: "🦊 Fox", bird: "🐦 Bird", mixed: "🎲 Mixed" };
+
+const words = (animal: string, kind: string, def: string) => ({
+    type: OptionType.STRING as const,
+    description: `${animal} – ${kind}, separated by commas. Add your own!`,
+    default: def,
+});
 
 const settings = definePluginSettings({
-    meows: {
-        type: OptionType.STRING,
-        description: "Normal meows, separated by commas. Add your own variations!",
-        default: DEFAULT_MEOWS,
-    },
-    rare: {
-        type: OptionType.STRING,
-        description: "Rare ones (mrrrp, nya, purrs...), separated by commas",
-        default: DEFAULT_RARE,
-    },
-    stretch: {
-        type: OptionType.BOOLEAN,
-        description: "Randomly stretch, shout and decorate them (meeeow, MEOW, mrow~)",
-        default: true,
+    mode: {
+        type: OptionType.SELECT,
+        description: "What to send (right-click the paw to switch quickly)",
+        options: MODES.map(m => ({ label: LABELS[m], value: m, default: m === "cat" })),
     },
     rareChance: {
         type: OptionType.NUMBER,
-        description: "Chance (in %) of a rare one like mrrrp or nya instead of a meow",
+        description: "Chance (in %) of a rare one (mrrrp, *wags tail*, ...) instead of a normal one",
         default: 15,
     },
+    stretch: {
+        type: OptionType.BOOLEAN,
+        description: "Randomly stretch, shout and decorate them (meeeow, WOOF, yip~)",
+        default: true,
+    },
+    // cat keeps its old setting names so lists you already edited stay
+    meows: words("Cat", "normal", DEFAULTS.cat.normal),
+    rare: words("Cat", "rare", DEFAULTS.cat.rare),
+    dogNormal: words("Dog", "normal", DEFAULTS.dog.normal),
+    dogRare: words("Dog", "rare", DEFAULTS.dog.rare),
+    foxNormal: words("Fox", "normal", DEFAULTS.fox.normal),
+    foxRare: words("Fox", "rare", DEFAULTS.fox.rare),
+    birdNormal: words("Bird", "normal", DEFAULTS.bird.normal),
+    birdRare: words("Bird", "rare", DEFAULTS.bird.rare),
 });
 
-// ---------- meow generator ----------
+const KEYS: Record<Animal, [keyof typeof settings.store, keyof typeof settings.store]> = {
+    cat: ["meows", "rare"],
+    dog: ["dogNormal", "dogRare"],
+    fox: ["foxNormal", "foxRare"],
+    bird: ["birdNormal", "birdRare"],
+};
+
+// ---------- generator ----------
 const rand = (n: number) => Math.floor(Math.random() * n);
 const pick = <T,>(a: T[]) => a[rand(a.length)];
 const chance = (p: number) => Math.random() < p;
 
+// your list from the settings (comma-separated), or the default if you emptied it
+function list(txt: unknown, fallback: string) {
+    const split = (s: string) => s.split(",").map(w => w.trim()).filter(Boolean);
+    const mine = typeof txt === "string" ? split(txt) : [];
+    return mine.length ? mine : split(fallback);
+}
 
-// your lists from the settings (comma-separated), or the defaults if you emptied one
-const list = (txt: string, fallback: string) =>
-    (txt.split(",").map(w => w.trim()).filter(Boolean).length ? txt : fallback)
-        .split(",").map(w => w.trim()).filter(Boolean);
-
-// stretch one letter: meow -> meeeow, mrrp -> mrrrrrp
+// stretch one letter: meow -> meeeow, ruff -> ruuuff
 function stretch(w: string) {
     const spots = [...w].map((c, i) => "aeiouyr".includes(c) ? i : -1).filter(i => i >= 0);
     if (!spots.length) return w;
@@ -53,15 +94,18 @@ function stretch(w: string) {
     return w.slice(0, i) + w[i].repeat(2 + rand(4)) + w.slice(i + 1);
 }
 
-export function meow() {
+export function sound(mode: Mode = settings.store.mode ?? "cat") {
+    const animal: Animal = mode === "mixed" ? pick(ANIMALS) : (DEFAULTS[mode] ? mode : "cat");
+    const [nk, rk] = KEYS[animal];
+    const normal = list(settings.store[nk], DEFAULTS[animal].normal);
+    const rareList = list(settings.store[rk], DEFAULTS[animal].rare);
     const rare = chance(settings.store.rareChance / 100);
-    const MEOWS = list(settings.store.meows, DEFAULT_MEOWS);
-    const RARE = list(settings.store.rare, DEFAULT_RARE);
-    let w = rare && RARE.length ? pick(RARE) : pick(MEOWS);
+
+    let w = rare ? pick(rareList) : pick(normal);
     const fx = settings.store.stretch;
     if (fx && chance(0.35)) w = stretch(w);
-    if (fx && !rare && chance(0.2)) w = `${w} ${pick(MEOWS)}`;        // meow mrow
-    if (fx && chance(0.12)) w = w.toUpperCase();                       // MEOW
+    if (fx && !rare && chance(0.2)) w = `${w} ${pick(normal)}`;   // ruff woof
+    if (fx && chance(0.12)) w = w.toUpperCase();                  // MEOW
     if (fx && chance(0.3)) w += pick(["~", "!", "?", " :3", "!!", "~~", " >w<"]);
     return w;
 }
@@ -79,9 +123,28 @@ function PawIcon() {
     );
 }
 
+function MeowButton({ channelId }: { channelId: string; }) {
+    const { mode } = settings.use(["mode"]);
+    const m: Mode = MODES.includes(mode) ? mode : "cat";
+    return (
+        <ChatBarButton
+            tooltip={`${LABELS[m]} (right-click to switch)`}
+            onClick={() => sendMessage(channelId, { content: sound(m) })}
+            onContextMenu={e => {
+                e.preventDefault();
+                const next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
+                settings.store.mode = next;
+                showToast({ text: `${LABELS[next]} mode` });
+            }}
+        >
+            <PawIcon />
+        </ChatBarButton>
+    );
+}
+
 export default definePlugin({
     name: "AutoMeow",
-    description: "Adds a paw button to the chat bar: every click sends a meow (meow, mrow, maiw, meuw, mrrrp, nya...)",
+    description: "Adds a paw button to the chat bar: every click sends a meow (or woof, yip, tweet...). Right-click it to switch between cat, dog, fox, bird and mixed",
     authors: [{ name: "Arham", id: 0n }],
     settings,
 
@@ -89,11 +152,7 @@ export default definePlugin({
         icon: PawIcon,
         render: ({ channel, isMainChat }) => {
             if (!isMainChat || !ChannelStore.getChannel(channel.id)) return null;
-            return (
-                <ChatBarButton tooltip="Meow" onClick={() => sendMessage(channel.id, { content: meow() })}>
-                    <PawIcon />
-                </ChatBarButton>
-            );
+            return <MeowButton channelId={channel.id} />;
         },
     },
 });
