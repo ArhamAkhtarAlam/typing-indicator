@@ -30,10 +30,15 @@ const settings = definePluginSettings({
         description: "Only these people can use !uwu (user IDs, comma-separated). Empty = anyone",
         default: "",
     },
-    maxStack: {
+    wobbleAt: {
         type: OptionType.NUMBER,
-        description: "Each !uwu adds one more uwuified message (stacking). Most that can pile up per channel (0 = no limit)",
-        default: 5,
+        description: "Stacking (!uwu @you x10 = 10 messages): past this many stacked in a channel, every extra one has a growing chance to fizzle (+4% each, up to 90%)",
+        default: 20,
+    },
+    stackLimit: {
+        type: OptionType.NUMBER,
+        description: "Most uwuified messages that can pile up per channel (0 = no limit)",
+        default: 100,
     },
     dodgeChance: {
         type: OptionType.NUMBER,
@@ -125,6 +130,25 @@ let tiredUntil = 0;
 const DODGED = ["*dodges* 🛡️", "*does a backflip and dodges* 🛡️", "*rolls out of the way* 🛡️", "nice try 😼🛡️", "*parries* ⚔️🛡️"];
 const TRIPPED = ["*trips and falls*", "*tries to dodge and faceplants*", "*slips on a banana*", "*dodges straight into it*", "*fails the dodge*"];
 
+// stack `count` more traps; past wobbleAt each one may fizzle. Returns how many actually stuck.
+export function addTraps(channelId: string, count: number) {
+    const { wobbleAt, stackLimit } = settings.store;
+    let n = traps.get(channelId) ?? 0, stuck = 0;
+    for (let i = 0; i < count; i++) {
+        if (stackLimit > 0 && n >= stackLimit) break;
+        if (n >= wobbleAt && Math.random() < Math.min(0.9, (n - wobbleAt + 1) * 0.04)) continue;
+        n++; stuck++;
+    }
+    if (n > 0) traps.set(channelId, n);
+    return stuck;
+}
+
+// "!uwu @you x5" -> 5 (1 if there's no number, at most 100 per message)
+export const stackCount = (content: string) => {
+    const m = content.match(/(?:^|\s)[x×*]\s*(\d{1,4})\b/i);
+    return m ? Math.min(100, Math.max(1, parseInt(m[1], 10))) : 1;
+};
+
 function dodge(channelId: string, msg: { content: string; }) {
     const now = Date.now();
     const tired = now < tiredUntil;
@@ -133,9 +157,7 @@ function dodge(channelId: string, msg: { content: string; }) {
         traps.delete(channelId);
         msg.content = pick(DODGED);
     } else {
-        const n = traps.get(channelId) ?? 0;
-        const max = settings.store.maxStack;
-        traps.set(channelId, max > 0 ? Math.min(n + 1, max) : n + 1);
+        addTraps(channelId, 1);
         msg.content = uwuify(pick(TRIPPED), settings.store.trapLevel as Level);
     }
 }
@@ -167,7 +189,7 @@ export default definePlugin({
             const author = message.author;
             if (!me || !author || author.id === me) return;
             const content = message.content ?? "";
-            // "!uwu", "!uwu @you" or "@you !uwu"
+            // "!uwu", "!uwu @you", "@you !uwu", "!uwu @you x5"
             if (!/^\s*(<@!?\d+>\s*)*!uwu\b/i.test(content)) return;
 
             // in servers they have to tag you; in DMs and group DMs they don't
@@ -180,10 +202,7 @@ export default definePlugin({
 
             const allowed = settings.store.triggerUsers.split(/[\s,]+/).filter(Boolean);
             if (allowed.length && !allowed.includes(author.id)) return;
-            const now = traps.get(message.channel_id) ?? 0;
-            const max = settings.store.maxStack;
-            if (max > 0 && now >= max) return;
-            traps.set(message.channel_id, now + 1);
+            addTraps(message.channel_id, stackCount(content));
         },
     },
 });
