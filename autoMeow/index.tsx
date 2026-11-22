@@ -3,8 +3,8 @@
  *   click        -> send a meow (or a woof, yip, tweet... depending on the mode)
  *   hold         -> combo: one message with a burst (meow meow MEOW mrrrp!)
  *   right-click  -> switch mode (cat, dog, fox, bird, mixed)
- * Plus a translator (translator.tsx): with a message typed in the chat box, clicking the paw sends it in
- * animal language (so does starting it with !cat / !dog / !fox / !bird), and anyone else with AutoMeow
+ * Plus a translator (translator.tsx): with a message typed in the chat box, clicking the paw sends it as
+ * normal-looking meows with the real text hidden in invisible characters (so does starting it with !cat / !dog / !fox / !bird), and anyone else with AutoMeow
  * sees the real message under it.
  */
 
@@ -14,7 +14,7 @@ import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { ChannelStore, ComponentDispatch, DraftStore, DraftType, showToast, useRef, useStateFromStores } from "@webpack/common";
 
-import { Animal as LangAnimal, ANIMALS as LANGS, encode, MAX_LEN, NAME, Translation } from "./translator";
+import { Animal as LangAnimal, ANIMALS as LANGS, encode, escapeTildes, MAX_LEN, NAME, Translation } from "./translator";
 
 const DEFAULTS = {
     cat: {
@@ -162,14 +162,17 @@ const nextMode = (m: Mode) => {
     showToast({ text: `${LABELS[next]} mode` });
 };
 const langOf = (m: Mode): LangAnimal => m === "mixed" ? pick(LANGS) : m;
+// the visible part of a translated message: a few normal sounds (the real text hides in invisible characters)
+const cover = (animal: LangAnimal, text: string) =>
+    Array.from({ length: 2 + rand(3) + Math.min(5, Math.floor(text.length / 60)) }, () => sound(animal)).join(" ");
 const draftOf = (channelId: string) => (DraftStore.getDraft(channelId, DraftType.ChannelMessage) ?? "").trim();
 
 // paw click with something typed in the chat box: send that in animal language instead of a meow
 function sendTranslated(channelId: string, m: Mode, text: string) {
     const animal = langOf(m);
-    const out = encode(text, animal);
+    const out = encode(text, animal, cover(animal, text));
     if (out.length > MAX_LEN) {
-        showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 300 letters max)` });
+        showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 600 letters max)` });
         return;
     }
     // goes straight to Discord: RandomUwU and the speak-everything setting don't touch it again
@@ -196,7 +199,7 @@ function MeowButton({ channelId }: { channelId: string; }) {
                     cancel();
                     hold.current.timer = setTimeout(() => {
                         hold.current.fired = true;
-                        sendMessage(channelId, { content: combo(m) });
+                        sendMessage(channelId, { content: escapeTildes(combo(m)) });
                     }, HOLD_MS);
                 },
                 onPointerUp: cancel,
@@ -207,7 +210,7 @@ function MeowButton({ channelId }: { channelId: string; }) {
                 if (hold.current.fired) { hold.current.fired = false; return; }   // the hold already sent a combo
                 const text = draftOf(channelId);
                 if (text) sendTranslated(channelId, m, text);
-                else sendMessage(channelId, { content: sound(m) });
+                else sendMessage(channelId, { content: escapeTildes(sound(m)) });
             }}
             onContextMenu={e => { e.preventDefault(); nextMode(m); }}
         >
@@ -234,9 +237,9 @@ export default definePlugin({
         }
         if (!animal) return;
 
-        const out = encode(text, animal);
+        const out = encode(text, animal, cover(animal, text));
         if (out.length > MAX_LEN) {
-            showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 300 letters max), sent it normally` });
+            showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 600 letters max), sent it normally` });
             msg.content = text;
             return;
         }
