@@ -30,6 +30,11 @@ const settings = definePluginSettings({
         description: "Only these people can use !uwu (user IDs, comma-separated). Empty = anyone",
         default: "",
     },
+    maxStack: {
+        type: OptionType.NUMBER,
+        description: "Each !uwu adds one more uwuified message (stacking). Most that can pile up per channel (0 = no limit)",
+        default: 5,
+    },
     level: {
         type: OptionType.SELECT,
         description: "How uwu the random 1% messages get",
@@ -52,8 +57,8 @@ const settings = definePluginSettings({
 
 type Level = "light" | "medium" | "extreme";
 
-// channel id -> who said !uwu there. Your next message in that channel is doomed.
-const traps = new Map<string, string>();
+// channel id -> how many of your next messages there are doomed (each !uwu adds one)
+const traps = new Map<string, number>();
 
 const FACES = ["owo", "uwu", ">w<", "^w^", "OwO", "UwU", ":3", "x3", "(˘ω˘)", "(⁄˘⁄ ⁄ ω⁄ ⁄ ˘⁄)♡"];
 const ACTIONS = ["*nuzzles*", "*blushes*", "*pounces on you*", "*wags tail*", "*stares at you*",
@@ -115,8 +120,10 @@ export default definePlugin({
 
     onBeforeMessageSend(channelId, msg) {
         if (!msg.content.trim() || msg.content.startsWith("/")) return;
-        if (traps.has(channelId)) {
-            traps.delete(channelId);
+        const left = traps.get(channelId) ?? 0;
+        if (left > 0) {
+            if (left > 1) traps.set(channelId, left - 1);
+            else traps.delete(channelId);
             msg.content = uwuify(msg.content, settings.store.trapLevel as Level);
         } else if (Math.random() * 100 < settings.store.chance) {
             msg.content = uwuify(msg.content);
@@ -143,10 +150,16 @@ export default definePlugin({
 
             const allowed = settings.store.triggerUsers.split(/[\s,]+/).filter(Boolean);
             if (allowed.length && !allowed.includes(author.id)) return;
-            if (traps.has(message.channel_id)) return;
-            traps.set(message.channel_id, author.id);
+            const now = traps.get(message.channel_id) ?? 0;
+            const max = settings.store.maxStack;
+            if (max > 0 && now >= max) return;
+            traps.set(message.channel_id, now + 1);
             const name = (author as any).globalName || author.username;
-            showToast({ text: `${name} said !uwu. Your next message here will be uwuified >w<` });
+            showToast({
+                text: now === 0
+                    ? `${name} said !uwu. Your next message here will be uwuified >w<`
+                    : `${name} stacked it! Your next ${now + 1} messages here will be uwuified >w<`,
+            });
         },
     },
 });

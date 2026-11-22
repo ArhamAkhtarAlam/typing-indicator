@@ -47,7 +47,7 @@ Every message you send has a 1% chance of getting uwuified ("Hello I really love
 
 **Levels:** pick how uwu it gets: *light* (hewwo), *medium* (h-hewwo, dis is nyice) or *extreme* (\*huggles you\* H-h-hewwo, w-wat do yuw dink? >w<). The random messages and the trap each have their own level.
 
-**Friend trap (off by default):** turn on *Let friends type !uwu* in RandomUwU's settings. When a friend sends `!uwu` (in a server they have to tag you: `!uwu @you`), your next message **in that channel** gets uwuified at the trap level (extreme by default), and you can't stop it. You get a popup telling you who did it. If *Only these people can use !uwu* is empty, anyone can do it; to limit it, put user IDs there (right-click someone, then Copy User ID; needs Developer Mode).
+**Friend trap (off by default):** turn on *Let friends type !uwu* in RandomUwU's settings. When a friend sends `!uwu` (in a server they have to tag you: `!uwu @you`), your next message **in that channel** gets uwuified at the trap level (extreme by default), and you can't stop it. You get a popup telling you who did it. Traps stack: every extra `!uwu` adds one more uwuified message (up to 5 per channel by default, changeable in *maxStack*). If *Only these people can use !uwu* is empty, anyone can do it; to limit it, put user IDs there (right-click someone, then Copy User ID; needs Developer Mode).
 
 ## Bonus plugin: AutoMeow
 
