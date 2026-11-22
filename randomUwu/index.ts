@@ -35,6 +35,11 @@ const settings = definePluginSettings({
         description: "Each !uwu adds one more uwuified message (stacking). Most that can pile up per channel (0 = no limit)",
         default: 5,
     },
+    dodgeChance: {
+        type: OptionType.NUMBER,
+        description: "Send !dodge to try to clear the traps in a channel. Chance (in %) it works; if it fails you get one more trap",
+        default: 30,
+    },
     level: {
         type: OptionType.SELECT,
         description: "How uwu the random 1% messages get",
@@ -112,6 +117,29 @@ export function uwuify(msg: string, level: Level = settings.store.level as Level
     return out;
 }
 
+// ---------- !dodge ----------
+// a gamble: it might clear every trap in the channel, or it backfires and adds one.
+// After any attempt your legs are tired for a random 3-10 minutes, and a dodge in that time always fails.
+// The result looks the same whether or not you were actually trapped, so you can't use it to check.
+let tiredUntil = 0;
+const DODGED = ["*dodges* 🛡️", "*does a backflip and dodges* 🛡️", "*rolls out of the way* 🛡️", "nice try 😼🛡️", "*parries* ⚔️🛡️"];
+const TRIPPED = ["*trips and falls*", "*tries to dodge and faceplants*", "*slips on a banana*", "*dodges straight into it*", "*fails the dodge*"];
+
+function dodge(channelId: string, msg: { content: string; }) {
+    const now = Date.now();
+    const tired = now < tiredUntil;
+    tiredUntil = now + (3 + Math.random() * 7) * 60_000;
+    if (!tired && Math.random() * 100 < settings.store.dodgeChance) {
+        traps.delete(channelId);
+        msg.content = pick(DODGED);
+    } else {
+        const n = traps.get(channelId) ?? 0;
+        const max = settings.store.maxStack;
+        traps.set(channelId, max > 0 ? Math.min(n + 1, max) : n + 1);
+        msg.content = uwuify(pick(TRIPPED), settings.store.trapLevel as Level);
+    }
+}
+
 export default definePlugin({
     name: "RandomUwU",
     description: "Every message you send has a 1% chance (changeable) of getting uwuified. Optional: friends can say !uwu to uwuify your next message",
@@ -120,6 +148,7 @@ export default definePlugin({
 
     onBeforeMessageSend(channelId, msg) {
         if (!msg.content.trim() || msg.content.startsWith("/")) return;
+        if (settings.store.friendTrigger && /^\s*!dodge\s*$/i.test(msg.content)) return dodge(channelId, msg);
         const left = traps.get(channelId) ?? 0;
         if (left > 0) {
             if (left > 1) traps.set(channelId, left - 1);
