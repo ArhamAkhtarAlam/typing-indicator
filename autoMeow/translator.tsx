@@ -12,9 +12,8 @@
  *   4. those characters go right after the first plain word
  * Each invisible character holds ~2.6 bits, so a message can be ~600 letters.
  *
- * The same trick does whispers ("sounds good ;; he's lying": everyone sees "sounds good", AutoMeow users
- * also see the secret), and a 3-character signature at the end of your messages lets other AutoMeow
- * users show a paw badge next to your name.
+ * The same trick adds a 3-character signature at the end of your messages, so other AutoMeow users can
+ * show a paw badge next to your name.
  *
  * Don't change INVISIBLE or its order: people with a different list can't read your messages.
  */
@@ -49,9 +48,8 @@ function utf8(bytes: number[]) {
 // one "~" is fine, but two of them make strikethrough: always send "\~"
 export const escapeTildes = (s: string) => s.replace(/\\?~/g, "\\~");
 
-// payload kinds (first hidden byte): 1-4 = animal translation, 5 = whisper
-const WHISPER = 5;
-export type Hidden = { kind: Animal | "whisper"; text: string; };
+// first hidden byte: 1-4 = which animal
+export type Hidden = { kind: Animal; text: string; };
 
 function hide(kind: number, text: string) {
     const body = [...new TextEncoder().encode(text)];
@@ -76,9 +74,6 @@ function tuck(visible: string, hidden: string) {
 export const encode = (text: string, animal: Animal, cover: string) =>
     tuck(escapeTildes(cover.trim()), hide(1 + ANIMALS.indexOf(animal), text));
 
-// "sounds good" + secret "he's lying"
-export const whisper = (visible: string, secret: string) => tuck(visible, hide(WHISPER, secret));
-
 // ---------- signature: tells other AutoMeow users you have it too ----------
 export const SIGN = "\u2064\u2063\u2064";
 // found anywhere (RandomUwU may add a face after it), but not as part of a longer hidden message
@@ -93,7 +88,7 @@ function read(run: string): Hidden | null {
     const bytes: number[] = [];
     while (n > 0n) { bytes.unshift(Number(n % 256n)); n /= 256n; }
     if (bytes.length < 3) return null;
-    const kind = bytes[0] === WHISPER ? "whisper" : ANIMALS[bytes[0] - 1];
+    const kind = ANIMALS[bytes[0] - 1];
     if (!kind) return null;
     const body = bytes.slice(1, -2), sum = bytes.slice(-2), want = check(body);
     if (sum[0] !== want[0] || sum[1] !== want[1]) return null;
@@ -116,7 +111,7 @@ export function Translation({ message }: { message: Message; }) {
     const content = message.content ?? "";
     const t = decode(content);
     if (!t) return null;
-    const label = t.kind === "whisper" ? "🤫 Whisper:" : `${EMOJI[t.kind]} ${NAME[t.kind]} → English:`;
+    const label = `${EMOJI[t.kind]} ${NAME[t.kind]} → English:`;
     return (
         <div style={{ color: "var(--text-muted)", fontSize: 14, marginTop: 2 }}>
             <i>{label}</i>{" "}

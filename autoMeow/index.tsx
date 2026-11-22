@@ -6,8 +6,7 @@
  * Plus, using invisible characters (translator.tsx):
  *   - translator: with a message typed, the paw sends it as normal-looking meows with the real text hidden
  *     inside (so does starting it with !cat / !dog / !fox / !bird); other AutoMeow users see the real text
- *   - whisper: "sounds good ;; he's lying" sends "sounds good", the part after ;; only AutoMeow users see
- *   - paw badge: your messages carry a tiny invisible signature, and people whose messages have it get a
+ *   - paw badge: messages AutoMeow sends (never your normal ones, bots like Cat Bot need those exact) carry a tiny invisible signature, and people whose messages have it get a
  *     🐾 next to their name, so you know who can read your secrets
  */
 
@@ -19,7 +18,7 @@ import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
 import { ChannelStore, ComponentDispatch, DraftStore, DraftType, showToast, UserStore, useRef, useStateFromStores } from "@webpack/common";
 
-import { Animal as LangAnimal, ANIMALS as LANGS, decode, encode, escapeTildes, hasInvisible, MAX_LEN, NAME, sign, signed, Translation, whisper } from "./translator";
+import { Animal as LangAnimal, ANIMALS as LANGS, decode, encode, escapeTildes, hasInvisible, MAX_LEN, NAME, sign, signed, Translation } from "./translator";
 
 const DEFAULTS = {
     cat: {
@@ -79,17 +78,12 @@ const settings = definePluginSettings({
     },
     showTranslations: {
         type: OptionType.BOOLEAN,
-        description: "Translator: show the real message under animal-language messages and whispers",
+        description: "Translator: show the real message under animal-language messages",
         default: true,
-    },
-    whisperSeparator: {
-        type: OptionType.STRING,
-        description: "Whisper: everything after this is secret (\"sounds good ;; he's lying\" → everyone sees \"sounds good\")",
-        default: ";;",
     },
     signMessages: {
         type: OptionType.BOOLEAN,
-        description: "Paw badge: add an invisible signature to your messages, so other AutoMeow users see a 🐾 next to your name",
+        description: "Paw badge: add an invisible signature to the messages AutoMeow sends (meows, combos, translations), so other AutoMeow users see a 🐾 next to your name. Your normal messages are never changed",
         default: true,
     },
     showBadges: {
@@ -240,26 +234,9 @@ function MeowButton({ channelId }: { channelId: string; }) {
     );
 }
 
-// whisper / !cat / speakAll; returns { cancel: true } to stop the send
-function transform(msg: { content: string; }): { cancel: boolean; } | void {
+// !cat / speakAll
+function transform(msg: { content: string; }) {
     const content = msg.content;
-    // whisper: "visible ;; secret"
-    const sep = settings.store.whisperSeparator || ";;";
-    const at = content.indexOf(sep);
-    if (at >= 0 && !/^\s*!(cat|dog|fox|bird)\s/i.test(content)) {
-        const visible = content.slice(0, at).trim(), secret = content.slice(at + sep.length).trim();
-        if (visible && secret) {
-            const out = whisper(visible, secret);
-            if (out.length > MAX_LEN) {
-                showToast({ text: "Whisper too long (the secret part can be about 600 letters), not sent" });
-                return { cancel: true };
-            }
-            msg.content = out;
-            (msg as any).meowTranslated = true;
-            return;
-        }
-    }
-
     let animal: LangAnimal | null = null, text = content;
     const m = content.match(/^\s*!(cat|dog|fox|bird)\s+([\s\S]+)$/i);
     if (m) { animal = m[1].toLowerCase() as LangAnimal; text = m[2]; }
@@ -274,7 +251,7 @@ function transform(msg: { content: string; }): { cancel: boolean; } | void {
         msg.content = text;
         return;
     }
-    msg.content = out;
+    msg.content = signIfOn(out);
     (msg as any).meowTranslated = true;   // RandomUwU leaves it alone, so it can still be decoded
 }
 
@@ -291,7 +268,7 @@ function remember(id: string) {
 
 export default definePlugin({
     name: "AutoMeow",
-    description: "Adds a paw button to the chat bar: click it to send a meow (or woof, yip, tweet...), hold it for a combo, right-click to switch animal. If you've typed a message, the paw sends it in animal language instead, and friends with AutoMeow see the real text. Also: secret whispers (\"sounds good ;; he's lying\") and a 🐾 badge next to people who have AutoMeow",
+    description: "Adds a paw button to the chat bar: click it to send a meow (or woof, yip, tweet...), hold it for a combo, right-click to switch animal. If you've typed a message, the paw sends it in animal language instead, and friends with AutoMeow see the real text. Also shows a 🐾 badge next to people who have AutoMeow",
     authors: [{ name: "Arham", id: 0n }],
     settings,
 
@@ -303,10 +280,7 @@ export default definePlugin({
     onBeforeMessageSend(_channelId, msg) {
         const content = msg.content;
         if (!content.trim() || content.startsWith("/")) return;
-        const res = transform(msg);
-        if (res) return res;
-        // not on commands like !uwu / !dodge, so they still match exactly
-        if (settings.store.signMessages && !/^\s*!/.test(msg.content)) msg.content = sign(msg.content);
+        transform(msg);
     },
 
     renderMessageAccessory: ({ message }) => (
@@ -320,7 +294,7 @@ export default definePlugin({
         if (!known.has(id) && hasInvisible(content) && (signed(content) || decode(content))) remember(id);
         if (!settings.store.showBadges || !known.has(id) || id === UserStore.getCurrentUser()?.id) return null;
         return (
-            <span title="Has AutoMeow: can read your secret meows and whispers" style={{ marginLeft: 4, fontSize: 14, cursor: "default" }}>
+            <span title="Has AutoMeow: can read your secret meows" style={{ marginLeft: 4, fontSize: 14, cursor: "default" }}>
                 🐾
             </span>
         );
