@@ -7,7 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { ChannelStore, showToast, UserStore } from "@webpack/common";
+import { ChannelStore, UserStore } from "@webpack/common";
 
 const settings = definePluginSettings({
     chance: {
@@ -154,12 +154,6 @@ export default definePlugin({
             const max = settings.store.maxStack;
             if (max > 0 && now >= max) return;
             traps.set(message.channel_id, now + 1);
-            const name = (author as any).globalName || author.username;
-            showToast({
-                text: now === 0
-                    ? `${name} said !uwu. Your next message here will be uwuified >w<`
-                    : `${name} stacked it! Your next ${now + 1} messages here will be uwuified >w<`,
-            });
         },
     },
 });
