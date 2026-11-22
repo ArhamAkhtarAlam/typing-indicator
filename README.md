@@ -55,6 +55,10 @@ Windows, this plugin only:
 $env:PLUGINS="autoMeow"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
 ```
 
+## Bonus plugin: NoChillZone
+
+Closes Discord's "WOAH THERE. WAY TOO SPICY / Enter the chill zone" popup as soon as it appears (handy with AutoMeow). Discord still slows you down, since that happens on their side, but you don't have to click the popup away.
+
 ## Bonus plugin: ValorantDND
 
 Turns on **Do Not Disturb** only while VALORANT is running, then puts your old status back when you close it. Other games don't trigger it. (Vencord's built-in AutoDNDWhilePlaying fires for *every* game.)

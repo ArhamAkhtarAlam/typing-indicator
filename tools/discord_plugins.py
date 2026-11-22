@@ -35,7 +35,7 @@ if os.environ.get("DISCORD_DIR"):
 UP = VC_DIR / "src" / "userplugins"
 RENDERER = VC_DIR / "dist" / "renderer.js"
 PLUGIN_REPO = "https://github.com/ArhamAkhtarAlam/typing-indicator.git"
-REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow"]
+REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow", "noChillZone"]
 TASK = "DiscordPluginCheck"
 IS_WIN = os.name == "nt"
 NO_WINDOW = 0x08000000 if IS_WIN else 0
