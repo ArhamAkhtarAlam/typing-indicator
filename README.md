@@ -45,6 +45,8 @@ To update, run the installer again. Vencord lives in `~/Vencord`; set `VENCORD_D
 
 Every message you send has a 1% chance of getting uwuified ("Hello I really love this" becomes "Hewwo I weawwy wuv dis owo"). Links, mentions, emojis and code are left alone. You can change the chance and turn the faces off in its settings.
 
+**Friend trap (off by default):** turn on *Let friends type !uwu* in RandomUwU's settings, and when a friend sends a message starting with `!uwu`, your next message gets uwuified and you can't stop it. You get a popup telling you who did it. To let only certain people do it, put their user IDs in *Only these people can use !uwu* (right-click them, then Copy User ID; needs Developer Mode).
+
 ## Bonus plugin: AutoMeow
 
 Adds a paw button to the chat bar. Every click sends a meow (meow, mrow, maiw, meuw, miau...; sometimes mrrrp, nya~ or *purrs*), so you can spam-click it. Right-click the paw to switch mode: **cat**, **dog** (ruff, woof, bork, awoo, (ᵔᴥᵔ)...; sometimes *wags tail* or ૮ ・ﻌ・ა), **fox** (yip, ack, kyuu...), **bird** (tweet, chirp, coo...) or **mixed** (a random animal each click). In its settings you can edit every list (comma-separated) to add your own variations, change how often the rare ones show up, and turn off the random stretching (meeeow, WOOF, yip~). Dog lists by a friend.

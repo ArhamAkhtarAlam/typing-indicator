@@ -1,9 +1,12 @@
 /*
  * RandomUwU: every message you send has a small chance of getting uwuified.
+ * Optional (off by default): when a friend says !uwu, your next message gets uwuified, no escape.
  */
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
+import { Message } from "@vencord/discord-types";
+import { showToast, UserStore } from "@webpack/common";
 
 const settings = definePluginSettings({
     chance: {
@@ -16,7 +19,20 @@ const settings = definePluginSettings({
         description: "Add a face like owo or >w< at the end",
         default: true,
     },
+    friendTrigger: {
+        type: OptionType.BOOLEAN,
+        description: "Let friends type !uwu to force your next message to be uwuified (you can't stop it)",
+        default: false,
+    },
+    triggerUsers: {
+        type: OptionType.STRING,
+        description: "Only these people can use !uwu (user IDs, comma-separated). Empty = anyone",
+        default: "",
+    },
 });
+
+// set when someone says !uwu: your next message is doomed
+let doomedBy: string | null = null;
 
 const FACES = ["owo", "uwu", ">w<", "^w^", "OwO", "UwU", ":3", "x3", "(˘ω˘)", "(⁄˘⁄ ⁄ ω⁄ ⁄ ˘⁄)♡"];
 const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
@@ -45,14 +61,33 @@ export function uwuify(msg: string) {
 
 export default definePlugin({
     name: "RandomUwU",
-    description: "Every message you send has a 1% chance (changeable) of getting uwuified",
+    description: "Every message you send has a 1% chance (changeable) of getting uwuified. Optional: friends can say !uwu to uwuify your next message",
     authors: [{ name: "Arham", id: 0n }],
     settings,
 
     onBeforeMessageSend(_, msg) {
         if (!msg.content.trim() || msg.content.startsWith("/")) return;
-        if (Math.random() * 100 < settings.store.chance) {
+        if (doomedBy) {
+            doomedBy = null;
+            msg.content = uwuify(msg.content);
+        } else if (Math.random() * 100 < settings.store.chance) {
             msg.content = uwuify(msg.content);
         }
+    },
+
+    flux: {
+        MESSAGE_CREATE({ message, optimistic }: { message: Message; optimistic: boolean; }) {
+            if (optimistic || !settings.store.friendTrigger) return;
+            if (!/^\s*!uwu\b/i.test(message.content ?? "")) return;
+            const author = message.author;
+            const me = UserStore.getCurrentUser()?.id;
+            if (!author || author.id === me) return;
+            const allowed = settings.store.triggerUsers.split(/[\s,]+/).filter(Boolean);
+            if (allowed.length && !allowed.includes(author.id)) return;
+            if (doomedBy) return;
+            doomedBy = author.id;
+            const name = (author as any).globalName || author.username;
+            showToast({ text: `${name} said !uwu. Your next message will be uwuified >w<` });
+        },
     },
 });
