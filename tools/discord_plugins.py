@@ -35,7 +35,8 @@ if os.environ.get("DISCORD_DIR"):
 UP = VC_DIR / "src" / "userplugins"
 RENDERER = VC_DIR / "dist" / "renderer.js"
 PLUGIN_REPO = "https://github.com/ArhamAkhtarAlam/typing-indicator.git"
-REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow", "noChillZone"]
+REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow"]
+RETIRED_PLUGINS = ["noChillZone"]  # removed from the repo: deleted from your install too
 TASK = "DiscordPluginCheck"
 IS_WIN = os.name == "nt"
 NO_WINDOW = 0x08000000 if IS_WIN else 0
@@ -233,15 +234,28 @@ def update_sources():
     if git("pull", "--ff-only", "--quiet", check=False).returncode != 0:
         print("   (couldn't update, building what's there)")
 
+    for p in RETIRED_PLUGINS:
+        if (UP / p).exists():
+            say(f"Removing {p} (it was taken down)")
+            rmtree(UP / p)
+
     have = [p for p in REPO_PLUGINS if (UP / p).exists()]
     if have:
         say(f"Updating {', '.join(have)}")
         with tempfile.TemporaryDirectory() as tmp:
             if run(["git", "clone", "--quiet", "--depth", "1", PLUGIN_REPO, f"{tmp}/repo"],
                    check=False, quiet=True).returncode == 0:
+                repo = Path(tmp) / "repo"
                 for p in have:
+                    if not (repo / p).exists():
+                        continue  # no longer in the repo: keep what you have
                     rmtree(UP / p)
-                    shutil.copytree(Path(tmp) / "repo" / p, UP / p)
+                    shutil.copytree(repo / p, UP / p)
+                # keep this script itself up to date for next time
+                new_script = repo / "tools" / "discord_plugins.py"
+                saved = STATE / "discord_plugins.py"
+                if new_script.exists() and saved.exists():
+                    shutil.copy2(new_script, saved)
             else:
                 print("   (couldn't download them, keeping the ones you have)")
 
