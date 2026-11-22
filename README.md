@@ -51,7 +51,7 @@ Every message you send has a 1% chance of getting uwuified ("Hello I really love
 
 ## Bonus plugin: AutoMeow
 
-Adds a paw button to the chat bar. Every click sends a meow (meow, mrow, maiw, meuw, miau...; sometimes mrrrp, nya~ or *purrs*), so you can spam-click it. Right-click the paw to switch mode: **cat**, **dog** (ruff, woof, bork, awoo, (ᵔᴥᵔ)...; sometimes *wags tail* or ૮ ・ﻌ・ა), **fox** (yip, ack, kyuu...), **bird** (tweet, chirp, coo...) or **mixed** (a random animal each click). In its settings you can edit every list (comma-separated) to add your own variations, change how often the rare ones show up, and turn off the random stretching (meeeow, WOOF, yip~). Dog lists by a friend.
+Adds a paw button to the chat bar. Every click sends a meow (meow, mrow, maiw, meuw, miau...; sometimes mrrrp, nya~ or *purrs*), so you can spam-click it. **Hold** the paw for a combo: one message with a burst like `meow meow MEOW mrrrp!` (3 to 6 sounds, changeable in *comboMax*), so Discord's slowdown doesn't kick in. Right-click the paw to switch mode: **cat**, **dog** (ruff, woof, bork, awoo, (ᵔᴥᵔ)...; sometimes *wags tail* or ૮ ・ﻌ・ა), **fox** (yip, ack, kyuu...), **bird** (tweet, chirp, coo...) or **mixed** (a random animal each click). In its settings you can edit every list (comma-separated) to add your own variations, change how often the rare ones show up, and turn off the random stretching (meeeow, WOOF, yip~). Dog lists by a friend.
 
 Windows, this plugin only:
 

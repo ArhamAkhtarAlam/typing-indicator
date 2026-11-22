@@ -1,6 +1,7 @@
 /*
  * AutoMeow: a paw button in the chat bar.
  *   click        -> send a meow (or a woof, yip, tweet... depending on the mode)
+ *   hold         -> combo: one message with a burst (meow meow MEOW mrrrp!)
  *   right-click  -> switch mode (cat, dog, fox, bird, mixed)
  */
 
@@ -8,7 +9,7 @@ import { ChatBarButton } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, showToast } from "@webpack/common";
+import { ChannelStore, showToast, useRef } from "@webpack/common";
 
 const DEFAULTS = {
     cat: {
@@ -50,6 +51,11 @@ const settings = definePluginSettings({
         type: OptionType.NUMBER,
         description: "Chance (in %) of a rare one (mrrrp, *wags tail*, ...) instead of a normal one",
         default: 15,
+    },
+    comboMax: {
+        type: OptionType.NUMBER,
+        description: "Hold the paw for a combo: the most sounds in one combo message (it picks 3 up to this)",
+        default: 6,
     },
     stretch: {
         type: OptionType.BOOLEAN,
@@ -110,6 +116,18 @@ export function sound(mode: Mode = settings.store.mode ?? "cat") {
     return w;
 }
 
+// one message with a burst: "meow meow MEOW mrrrp!"
+export function combo(mode: Mode) {
+    const animal: Animal = mode === "mixed" ? pick(ANIMALS) : mode;
+    const max = Math.max(3, settings.store.comboMax || 6);
+    const n = 3 + rand(max - 2);
+    let out = Array.from({ length: n }, () => sound(animal)).join(" ");
+    if (!/[!?~]$/.test(out)) out += pick(["!", "!!", "~", "!!!"]);
+    return out;
+}
+
+const HOLD_MS = 400;
+
 // ---------- button ----------
 function PawIcon() {
     return (
@@ -126,10 +144,30 @@ function PawIcon() {
 function MeowButton({ channelId }: { channelId: string; }) {
     const { mode } = settings.use(["mode"]);
     const m: Mode = MODES.includes(mode) ? mode : "cat";
+    const hold = useRef<{ timer: any; fired: boolean; }>({ timer: null, fired: false });
+    const cancel = () => clearTimeout(hold.current.timer);
+
     return (
         <ChatBarButton
-            tooltip={`${LABELS[m]} (right-click to switch)`}
-            onClick={() => sendMessage(channelId, { content: sound(m) })}
+            tooltip={`${LABELS[m]} (hold for a combo, right-click to switch)`}
+            buttonProps={{
+                onPointerDown: e => {
+                    if (e.button !== 0) return;
+                    hold.current.fired = false;
+                    cancel();
+                    hold.current.timer = setTimeout(() => {
+                        hold.current.fired = true;
+                        sendMessage(channelId, { content: combo(m) });
+                    }, HOLD_MS);
+                },
+                onPointerUp: cancel,
+                onPointerLeave: cancel,
+            }}
+            onClick={() => {
+                cancel();
+                if (hold.current.fired) { hold.current.fired = false; return; }   // the hold already sent a combo
+                sendMessage(channelId, { content: sound(m) });
+            }}
             onContextMenu={e => {
                 e.preventDefault();
                 const next = MODES[(MODES.indexOf(m) + 1) % MODES.length];
@@ -144,7 +182,7 @@ function MeowButton({ channelId }: { channelId: string; }) {
 
 export default definePlugin({
     name: "AutoMeow",
-    description: "Adds a paw button to the chat bar: every click sends a meow (or woof, yip, tweet...). Right-click it to switch between cat, dog, fox, bird and mixed",
+    description: "Adds a paw button to the chat bar: every click sends a meow (or woof, yip, tweet...), hold it for a combo. Right-click it to switch between cat, dog, fox, bird and mixed",
     authors: [{ name: "Arham", id: 0n }],
     settings,
 
