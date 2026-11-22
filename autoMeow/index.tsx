@@ -3,18 +3,23 @@
  *   click        -> send a meow (or a woof, yip, tweet... depending on the mode)
  *   hold         -> combo: one message with a burst (meow meow MEOW mrrrp!)
  *   right-click  -> switch mode (cat, dog, fox, bird, mixed)
- * Plus a translator (translator.tsx): with a message typed in the chat box, clicking the paw sends it as
- * normal-looking meows with the real text hidden in invisible characters (so does starting it with !cat / !dog / !fox / !bird), and anyone else with AutoMeow
- * sees the real message under it.
+ * Plus, using invisible characters (translator.tsx):
+ *   - translator: with a message typed, the paw sends it as normal-looking meows with the real text hidden
+ *     inside (so does starting it with !cat / !dog / !fox / !bird); other AutoMeow users see the real text
+ *   - whisper: "sounds good ;; he's lying" sends "sounds good", the part after ;; only AutoMeow users see
+ *   - paw badge: your messages carry a tiny invisible signature, and people whose messages have it get a
+ *     🐾 next to their name, so you know who can read your secrets
  */
+
+import * as DataStore from "@api/DataStore";
 
 import { ChatBarButton } from "@api/ChatButtons";
 import { definePluginSettings } from "@api/Settings";
 import { sendMessage } from "@utils/discord";
 import definePlugin, { OptionType } from "@utils/types";
-import { ChannelStore, ComponentDispatch, DraftStore, DraftType, showToast, useRef, useStateFromStores } from "@webpack/common";
+import { ChannelStore, ComponentDispatch, DraftStore, DraftType, showToast, UserStore, useRef, useStateFromStores } from "@webpack/common";
 
-import { Animal as LangAnimal, ANIMALS as LANGS, encode, escapeTildes, MAX_LEN, NAME, Translation } from "./translator";
+import { Animal as LangAnimal, ANIMALS as LANGS, decode, encode, escapeTildes, hasInvisible, MAX_LEN, NAME, sign, signed, Translation, whisper } from "./translator";
 
 const DEFAULTS = {
     cat: {
@@ -74,7 +79,22 @@ const settings = definePluginSettings({
     },
     showTranslations: {
         type: OptionType.BOOLEAN,
-        description: "Translator: show the real message under animal-language messages",
+        description: "Translator: show the real message under animal-language messages and whispers",
+        default: true,
+    },
+    whisperSeparator: {
+        type: OptionType.STRING,
+        description: "Whisper: everything after this is secret (\"sounds good ;; he's lying\" → everyone sees \"sounds good\")",
+        default: ";;",
+    },
+    signMessages: {
+        type: OptionType.BOOLEAN,
+        description: "Paw badge: add an invisible signature to your messages, so other AutoMeow users see a 🐾 next to your name",
+        default: true,
+    },
+    showBadges: {
+        type: OptionType.BOOLEAN,
+        description: "Paw badge: show a 🐾 next to people who have AutoMeow",
         default: true,
     },
     // cat keeps its old setting names so lists you already edited stay
@@ -165,6 +185,7 @@ const langOf = (m: Mode): LangAnimal => m === "mixed" ? pick(LANGS) : m;
 // the visible part of a translated message: a few normal sounds (the real text hides in invisible characters)
 const cover = (animal: LangAnimal, text: string) =>
     Array.from({ length: 2 + rand(3) + Math.min(5, Math.floor(text.length / 60)) }, () => sound(animal)).join(" ");
+const signIfOn = (content: string) => settings.store.signMessages ? sign(content) : content;
 const draftOf = (channelId: string) => (DraftStore.getDraft(channelId, DraftType.ChannelMessage) ?? "").trim();
 
 // paw click with something typed in the chat box: send that in animal language instead of a meow
@@ -176,7 +197,7 @@ function sendTranslated(channelId: string, m: Mode, text: string) {
         return;
     }
     // goes straight to Discord: RandomUwU and the speak-everything setting don't touch it again
-    sendMessage(channelId, { content: out });
+    sendMessage(channelId, { content: signIfOn(out) });
     ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT");
 }
 
@@ -199,7 +220,7 @@ function MeowButton({ channelId }: { channelId: string; }) {
                     cancel();
                     hold.current.timer = setTimeout(() => {
                         hold.current.fired = true;
-                        sendMessage(channelId, { content: escapeTildes(combo(m)) });
+                        sendMessage(channelId, { content: signIfOn(escapeTildes(combo(m))) });
                     }, HOLD_MS);
                 },
                 onPointerUp: cancel,
@@ -210,7 +231,7 @@ function MeowButton({ channelId }: { channelId: string; }) {
                 if (hold.current.fired) { hold.current.fired = false; return; }   // the hold already sent a combo
                 const text = draftOf(channelId);
                 if (text) sendTranslated(channelId, m, text);
-                else sendMessage(channelId, { content: escapeTildes(sound(m)) });
+                else sendMessage(channelId, { content: signIfOn(escapeTildes(sound(m))) });
             }}
             onContextMenu={e => { e.preventDefault(); nextMode(m); }}
         >
@@ -219,37 +240,91 @@ function MeowButton({ channelId }: { channelId: string; }) {
     );
 }
 
+// whisper / !cat / speakAll; returns { cancel: true } to stop the send
+function transform(msg: { content: string; }): { cancel: boolean; } | void {
+    const content = msg.content;
+    // whisper: "visible ;; secret"
+    const sep = settings.store.whisperSeparator || ";;";
+    const at = content.indexOf(sep);
+    if (at >= 0 && !/^\s*!(cat|dog|fox|bird)\s/i.test(content)) {
+        const visible = content.slice(0, at).trim(), secret = content.slice(at + sep.length).trim();
+        if (visible && secret) {
+            const out = whisper(visible, secret);
+            if (out.length > MAX_LEN) {
+                showToast({ text: "Whisper too long (the secret part can be about 600 letters), not sent" });
+                return { cancel: true };
+            }
+            msg.content = out;
+            (msg as any).meowTranslated = true;
+            return;
+        }
+    }
+
+    let animal: LangAnimal | null = null, text = content;
+    const m = content.match(/^\s*!(cat|dog|fox|bird)\s+([\s\S]+)$/i);
+    if (m) { animal = m[1].toLowerCase() as LangAnimal; text = m[2]; }
+    else if (settings.store.speakAll && !/^\s*!(uwu|dodge)\b/i.test(content)) {
+        animal = langOf(MODES.includes(settings.store.mode) ? settings.store.mode : "cat");
+    }
+    if (!animal) return;
+
+    const out = encode(text, animal, cover(animal, text));
+    if (out.length > MAX_LEN) {
+        showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 600 letters max), sent it normally` });
+        msg.content = text;
+        return;
+    }
+    msg.content = out;
+    (msg as any).meowTranslated = true;   // RandomUwU leaves it alone, so it can still be decoded
+}
+
+// ---------- paw badge ----------
+// people seen with an AutoMeow signature (kept between restarts)
+const KNOWN_KEY = "AutoMeow_known";
+const known = new Set<string>();
+let saveTimer: any;
+function remember(id: string) {
+    known.add(id);
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => DataStore.set(KNOWN_KEY, [...known]), 2000);
+}
+
 export default definePlugin({
     name: "AutoMeow",
-    description: "Adds a paw button to the chat bar: click it to send a meow (or woof, yip, tweet...), hold it for a combo, right-click to switch animal. If you've typed a message, the paw sends it in animal language instead, and friends with AutoMeow see the real text",
+    description: "Adds a paw button to the chat bar: click it to send a meow (or woof, yip, tweet...), hold it for a combo, right-click to switch animal. If you've typed a message, the paw sends it in animal language instead, and friends with AutoMeow see the real text. Also: secret whispers (\"sounds good ;; he's lying\") and a 🐾 badge next to people who have AutoMeow",
     authors: [{ name: "Arham", id: 0n }],
     settings,
+
+    async start() {
+        const saved = await DataStore.get<string[]>(KNOWN_KEY);
+        saved?.forEach(id => known.add(id));
+    },
 
     onBeforeMessageSend(_channelId, msg) {
         const content = msg.content;
         if (!content.trim() || content.startsWith("/")) return;
-
-        let animal: LangAnimal | null = null, text = content;
-        const m = content.match(/^\s*!(cat|dog|fox|bird)\s+([\s\S]+)$/i);
-        if (m) { animal = m[1].toLowerCase() as LangAnimal; text = m[2]; }
-        else if (settings.store.speakAll && !/^\s*!(uwu|dodge)\b/i.test(content)) {
-            animal = langOf(MODES.includes(settings.store.mode) ? settings.store.mode : "cat");
-        }
-        if (!animal) return;
-
-        const out = encode(text, animal, cover(animal, text));
-        if (out.length > MAX_LEN) {
-            showToast({ text: `Too long for ${NAME[animal].toLowerCase()} language (about 600 letters max), sent it normally` });
-            msg.content = text;
-            return;
-        }
-        msg.content = out;
-        (msg as any).meowTranslated = true;   // RandomUwU leaves it alone, so it can still be decoded
+        const res = transform(msg);
+        if (res) return res;
+        // not on commands like !uwu / !dodge, so they still match exactly
+        if (settings.store.signMessages && !/^\s*!/.test(msg.content)) msg.content = sign(msg.content);
     },
 
     renderMessageAccessory: ({ message }) => (
         settings.store.showTranslations ? <Translation message={message} /> : null
     ),
+
+    renderMessageDecoration: ({ message }) => {
+        const id = message?.author?.id;
+        if (!id) return null;
+        const content = message.content ?? "";
+        if (!known.has(id) && hasInvisible(content) && (signed(content) || decode(content))) remember(id);
+        if (!settings.store.showBadges || !known.has(id) || id === UserStore.getCurrentUser()?.id) return null;
+        return (
+            <span title="Has AutoMeow: can read your secret meows and whispers" style={{ marginLeft: 4, fontSize: 14, cursor: "default" }}>
+                🐾
+            </span>
+        );
+    },
 
     chatBarButton: {
         icon: PawIcon,

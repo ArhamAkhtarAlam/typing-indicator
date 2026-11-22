@@ -57,6 +57,10 @@ Adds a paw button to the chat bar. Every click sends a meow (meow, mrow, maiw, m
 
 How it hides the text: Discord keeps some zero-width characters that are never drawn (the same ones the InvisibleChat plugin uses). There are 6 of them, so the message (plus which animal, plus a 2-byte checksum) is written as one big number in base 6, one invisible character per digit, slipped in after the first word. That fits about 600 letters per message (longer ones aren't sent, so you can shorten them). It's a secret language, not encryption: anyone with AutoMeow can read it. Mentions inside don't ping. AutoMeow now also always sends `~` as `\~`, so two of them never turn into strikethrough.
 
+**Secret whispers:** put `;;` in a normal message and everything after it is hidden. Typing `sounds good ;; he's lying` sends "sounds good" for everyone, and anyone with AutoMeow also sees "🤫 Whisper: he's lying" under it. You can change the `;;` in the settings.
+
+**Paw badge:** AutoMeow adds a tiny invisible signature to the end of your messages (3 invisible characters), and shows a 🐾 next to the name of anyone whose messages have it, so you can tell who can read your secret meows and whispers. It remembers people between restarts. You can turn off signing or the badges in the settings. Commands starting with `!` (like `!uwu`) are never signed.
+
 Windows, this plugin only:
 
 ```powershell
