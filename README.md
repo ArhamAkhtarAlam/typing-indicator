@@ -53,24 +53,14 @@ Every message you send has a 1% chance of getting uwuified ("Hello I really love
 
 Adds a paw button to the chat bar. Every click sends a meow (meow, mrow, maiw, meuw, miau...; sometimes mrrrp, nya~ or *purrs*), so you can spam-click it. **Hold** the paw for a combo: one message with a burst like `meow meow MEOW mrrrp!` (3 to 6 sounds, changeable in *comboMax*), so Discord's slowdown doesn't kick in. Right-click the paw to switch mode: **cat**, **dog** (ruff, woof, bork, awoo, (ᵔᴥᵔ)...; sometimes *wags tail* or ૮ ・ﻌ・ა), **fox** (yip, ack, kyuu...), **bird** (tweet, chirp, coo...) or **mixed** (a random animal each click). In its settings you can edit every list (comma-separated) to add your own variations, change how often the rare ones show up, and turn off the random stretching (meeeow, WOOF, yip~). Dog lists by a friend.
 
+**Animal translator (built in):** click the **speech-bubble** button next to the paw and your messages are sent in the current mode's language: "hi bestie" goes out as `Prrrp!! MIAWW MEOO Mewwwr? nya? mreow!...`. Right-click it to switch animal (in *mixed* mode every message picks a random one). For just one message, start it with `!cat`, `!dog`, `!fox` or `!bird` (`!dog see you at 8`). Anyone else with AutoMeow sees the real message under it ("🐱 Cat → English: hi bestie"); everyone else just sees a cat yelling. Plain meows (a normal `meow`, paw spam, `WOOF`) get a made-up translation instead, like "🐱 probably means: the red dot has returned". You can turn both off in the settings.
+
+How it hides the text: every word says four things at once: which sound it is (32 per animal: meow, mrow, maio, nya...), how stretched it is (meow, meeow, meeeow, meeeeow), its case (meow, MEOW, Meow) and what follows it (nothing, `!`, `?`, `\~`, `...`, `!!`, `?!` or `,`). That's 3072 versions of each word, so one word carries about 1.5 letters, and a message can be about 370 letters long (longer ones are sent normally). A 2-byte checksum stops normal meowing being mistaken for a message. Tildes are always sent as `\~`, so Discord never turns it into strikethrough. It's a secret language, not encryption: anyone with AutoMeow can read it. Mentions inside don't ping. Thanks to a friend for the letter-variants idea.
+
 Windows, this plugin only:
 
 ```powershell
 $env:PLUGINS="autoMeow"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
-```
-
-## Bonus plugin: MeowTranslator
-
-Talk in animal. Click the **speech-bubble** button in the chat bar to turn it on, and your messages are sent as cat noises: "hi bestie" goes out as `nya mew mew meo~~ mreow MEO purr purr mrrp...`. Right-click the button to switch to **dog**, **fox** or **bird**. To do it for just one message, start it with `!cat`, `!dog`, `!fox` or `!bird` (`!dog see you at 8`).
-
-Anyone else with MeowTranslator sees the real message under it ("🐱 Cat → English: hi bestie"). Everyone else just sees a cat yelling. It's not real encryption, just a secret language. Messages can be about 160 letters long (longer ones are sent normally), and mentions inside them don't ping.
-
-Bonus: when someone sends normal animal noises (a plain `meow`, `mrrrp nya~`, AutoMeow spam, `WOOF`), you get a made-up translation under it, like "🐱 probably means: the red dot has returned". You can turn both off in its settings.
-
-Windows, this plugin only:
-
-```powershell
-$env:PLUGINS="meowTranslator"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
 ```
 
 ## Bonus plugin: ValorantDND

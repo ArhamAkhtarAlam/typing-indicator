@@ -52,8 +52,9 @@ else
 fi
 
 # ---------- copy plugin + build ----------
-ALL_PLUGINS="typingVerbs valorantDnd randomUwu autoMeow meowTranslator"
+ALL_PLUGINS="typingVerbs valorantDnd randomUwu autoMeow"
 rm -rf "$VENCORD_DIR/src/userplugins/noChillZone"   # taken down
+rm -rf "$VENCORD_DIR/src/userplugins/meowTranslator"   # now part of AutoMeow
 mkdir -p "$VENCORD_DIR/src/userplugins"
 for p in ${PLUGINS:-$ALL_PLUGINS}; do
     [ -d "$REPO_ROOT/$p" ] || die "unknown plugin '$p' (choose from: $ALL_PLUGINS)"

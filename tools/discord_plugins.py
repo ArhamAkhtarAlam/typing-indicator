@@ -35,8 +35,8 @@ if os.environ.get("DISCORD_DIR"):
 UP = VC_DIR / "src" / "userplugins"
 RENDERER = VC_DIR / "dist" / "renderer.js"
 PLUGIN_REPO = "https://github.com/ArhamAkhtarAlam/typing-indicator.git"
-REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow", "meowTranslator"]
-RETIRED_PLUGINS = ["noChillZone"]  # removed from the repo: deleted from your install too
+REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow"]
+RETIRED_PLUGINS = ["noChillZone", "meowTranslator"]  # removed from the repo: deleted from your install too
 TASK = "DiscordPluginCheck"
 IS_WIN = os.name == "nt"
 NO_WINDOW = 0x08000000 if IS_WIN else 0
@@ -191,6 +191,8 @@ def restore_own_plugins():
     if not saved.exists():
         return
     for p in saved.iterdir():
+        if p.name in RETIRED_PLUGINS:
+            continue
         dest = UP / p.name
         if dest.is_dir():
             rmtree(dest)
@@ -236,8 +238,10 @@ def update_sources():
 
     for p in RETIRED_PLUGINS:
         if (UP / p).exists():
-            say(f"Removing {p} (it was taken down)")
+            say(f"Removing {p} (taken down or merged into another plugin)")
             rmtree(UP / p)
+        if (STATE / "userplugins" / p).exists():
+            rmtree(STATE / "userplugins" / p)
 
     have = [p for p in REPO_PLUGINS if (UP / p).exists()]
     if have:

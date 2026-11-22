@@ -1,4 +1,4 @@
-# Vencord plugin installer for Windows (TypingVerbs + ValorantDND + RandomUwU + AutoMeow + MeowTranslator),
+# Vencord plugin installer for Windows (TypingVerbs + ValorantDND + RandomUwU + AutoMeow),
 # plus a daily check + 'Fix Discord' button for after Discord updates (needs Python).
 #   irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
 # Re-run it any time to update Vencord + the plugin.
@@ -61,9 +61,11 @@ try {
     }
 
     # ---------- copy plugin + build ----------
-    $AllPlugins = @("typingVerbs", "valorantDnd", "randomUwu", "autoMeow", "meowTranslator")
-    $Retired = Join-Path $VencordDir "src\userplugins\noChillZone"   # taken down
-    if (Test-Path $Retired) { Remove-Item -Recurse -Force $Retired }
+    $AllPlugins = @("typingVerbs", "valorantDnd", "randomUwu", "autoMeow")
+    foreach ($old in @("noChillZone", "meowTranslator")) {   # taken down / now part of AutoMeow
+        $Retired = Join-Path $VencordDir "src\userplugins\$old"
+        if (Test-Path $Retired) { Remove-Item -Recurse -Force $Retired }
+    }
     $Wanted = if ($env:PLUGINS) { $env:PLUGINS -split "[ ,]+" | Where-Object { $_ } } else { $AllPlugins }
     New-Item -ItemType Directory -Force -Path (Join-Path $VencordDir "src\userplugins") | Out-Null
     foreach ($p in $Wanted) {
@@ -118,8 +120,8 @@ Write-Host "2. Settings -> Vencord -> Plugins, then turn on what you want:"
 Write-Host "   - TypingVerbs: also turn OFF TypingTweaks, then click its cog and set your verb (e.g. meowing)"
 Write-Host "   - ValorantDND: DND only while VALORANT runs (turn OFF AutoDNDWhilePlaying if it's on)"
 Write-Host "   - RandomUwU: 1% of your messages get uwuified (change the chance in its cog)"
-Write-Host "   - AutoMeow: paw button in the chat bar, every click sends a meow (right-click: dog/fox/bird mode)"
-Write-Host "   - MeowTranslator: speech-bubble button sends your messages in cat/dog/fox/bird language (or start with !cat / !dog), friends with it see the real text"
+Write-Host "   - AutoMeow: paw button in the chat bar, every click sends a meow (right-click: dog/fox/bird mode)."
+Write-Host "     Its speech-bubble button (or !cat / !dog) sends messages in animal language, friends with AutoMeow see the real text"
 if (Test-Path (Join-Path $env:LOCALAPPDATA "vesktop")) {
     Write-Host ""
     Write-Host "Vesktop users: Vesktop Settings -> Developer Options -> Vencord Location -> pick $VencordDir\dist"
