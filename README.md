@@ -59,6 +59,20 @@ Windows, this plugin only:
 $env:PLUGINS="autoMeow"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
 ```
 
+## Bonus plugin: MeowTranslator
+
+Talk in animal. Click the **speech-bubble** button in the chat bar to turn it on, and your messages are sent as cat noises: "hi bestie" goes out as `nya mew mew meo~~ mreow MEO purr purr mrrp...`. Right-click the button to switch to **dog**, **fox** or **bird**. To do it for just one message, start it with `!cat`, `!dog`, `!fox` or `!bird` (`!dog see you at 8`).
+
+Anyone else with MeowTranslator sees the real message under it ("🐱 Cat → English: hi bestie"). Everyone else just sees a cat yelling. It's not real encryption, just a secret language. Messages can be about 160 letters long (longer ones are sent normally), and mentions inside them don't ping.
+
+Bonus: when someone sends normal animal noises (a plain `meow`, `mrrrp nya~`, AutoMeow spam, `WOOF`), you get a made-up translation under it, like "🐱 probably means: the red dot has returned". You can turn both off in its settings.
+
+Windows, this plugin only:
+
+```powershell
+$env:PLUGINS="meowTranslator"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
+```
+
 ## Bonus plugin: ValorantDND
 
 Turns on **Do Not Disturb** only while VALORANT is running, then puts your old status back when you close it. Other games don't trigger it. (Vencord's built-in AutoDNDWhilePlaying fires for *every* game.)

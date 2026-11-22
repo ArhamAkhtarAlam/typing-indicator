@@ -35,7 +35,7 @@ if os.environ.get("DISCORD_DIR"):
 UP = VC_DIR / "src" / "userplugins"
 RENDERER = VC_DIR / "dist" / "renderer.js"
 PLUGIN_REPO = "https://github.com/ArhamAkhtarAlam/typing-indicator.git"
-REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow"]
+REPO_PLUGINS = ["typingVerbs", "valorantDnd", "randomUwu", "autoMeow", "meowTranslator"]
 RETIRED_PLUGINS = ["noChillZone"]  # removed from the repo: deleted from your install too
 TASK = "DiscordPluginCheck"
 IS_WIN = os.name == "nt"

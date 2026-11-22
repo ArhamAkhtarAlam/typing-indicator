@@ -148,6 +148,7 @@ export default definePlugin({
 
     onBeforeMessageSend(channelId, msg) {
         if (!msg.content.trim() || msg.content.startsWith("/")) return;
+        if ((msg as any).meowTranslated || /^\s*!(cat|dog|fox|bird)\s/i.test(msg.content)) return;   // MeowTranslator messages
         if (settings.store.friendTrigger && /^\s*!dodge\s*$/i.test(msg.content)) return dodge(channelId, msg);
         const left = traps.get(channelId) ?? 0;
         if (left > 0) {
