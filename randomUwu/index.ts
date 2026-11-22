@@ -143,6 +143,9 @@ export function addTraps(channelId: string, count: number) {
     return stuck;
 }
 
+// "!uwu", "!uwu @you", "@you !uwu", "!uwu @you x5"; also "!u-uwu" from friends on older versions
+const UWU_CMD = /^\s*(<@!?\d+>\s*)*!(u-)*uwu\b/i;
+
 // "!uwu @you x5" -> 5 (1 if there's no number, at most 100 per message)
 export const stackCount = (content: string) => {
     const m = content.match(/(?:^|\s)[x×*]\s*(\d{1,4})\b/i);
@@ -172,6 +175,8 @@ export default definePlugin({
         if (!msg.content.trim() || msg.content.startsWith("/")) return;
         if ((msg as any).meowTranslated || /^\s*!(cat|dog|fox|bird)\s/i.test(msg.content)) return;   // MeowTranslator messages
         if (settings.store.friendTrigger && /^\s*!dodge\s*$/i.test(msg.content)) return dodge(channelId, msg);
+        // never uwuify an !uwu (it would turn into "!u-uwu" and not count), and don't use up a trap on it
+        if (UWU_CMD.test(msg.content)) return;
         const left = traps.get(channelId) ?? 0;
         if (left > 0) {
             if (left > 1) traps.set(channelId, left - 1);
@@ -190,7 +195,7 @@ export default definePlugin({
             if (!me || !author || author.id === me) return;
             const content = message.content ?? "";
             // "!uwu", "!uwu @you", "@you !uwu", "!uwu @you x5"
-            if (!/^\s*(<@!?\d+>\s*)*!uwu\b/i.test(content)) return;
+            if (!UWU_CMD.test(content)) return;
 
             // in servers they have to tag you; in DMs and group DMs they don't
             const guildId = (message as any).guild_id ?? ChannelStore.getChannel(message.channel_id)?.guild_id;
