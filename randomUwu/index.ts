@@ -1,13 +1,16 @@
 /*
  * RandomUwU: every message you send has a small chance of getting uwuified.
  * Optional (off by default): when a friend says !uwu (in servers: !uwu @you), your next message in
- * that channel gets uwuified, no escape.
+ * that channel gets uwuified. Traps survive restarting Discord. Ways out: !dodge (a gamble) or
+ * !escape (a hard typing challenge).
  */
 
+import { sendBotMessage } from "@api/Commands";
+import * as DataStore from "@api/DataStore";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
 import { Message } from "@vencord/discord-types";
-import { ChannelStore, UserStore } from "@webpack/common";
+import { ChannelStore, ComponentDispatch, UserStore } from "@webpack/common";
 
 const settings = definePluginSettings({
     chance: {
@@ -45,6 +48,21 @@ const settings = definePluginSettings({
         description: "Send !dodge to try to clear the traps in a channel. Chance (in %) it works; if it fails you get one more trap",
         default: 30,
     },
+    escapeRounds: {
+        type: OptionType.NUMBER,
+        description: "!escape: how many codes in a row you have to type",
+        default: 3,
+    },
+    escapeSeconds: {
+        type: OptionType.NUMBER,
+        description: "!escape: seconds you get for each code",
+        default: 10,
+    },
+    escapeCooldown: {
+        type: OptionType.NUMBER,
+        description: "!escape: minutes before you can try again (win or lose)",
+        default: 30,
+    },
     level: {
         type: OptionType.SELECT,
         description: "How uwu the random 1% messages get",
@@ -69,6 +87,20 @@ type Level = "light" | "medium" | "extreme";
 
 // channel id -> how many of your next messages there are doomed (each !uwu adds one)
 const traps = new Map<string, number>();
+
+// traps (and the dodge/escape cooldowns) are saved, so restarting Discord doesn't get you out
+const SAVE_KEY = "RandomUwU_state";
+let saveTimer: ReturnType<typeof setTimeout> | undefined;
+function save() {
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => DataStore.set(SAVE_KEY, {
+        traps: Object.fromEntries(traps), tiredUntil, escapeUntil,
+    }), 500);
+}
+function setTraps(channelId: string, n: number) {
+    if (n > 0) traps.set(channelId, n); else traps.delete(channelId);
+    save();
+}
 
 const FACES = ["owo", "uwu", ">w<", "^w^", "OwO", "UwU", ":3", "x3", "(˘ω˘)", "(⁄˘⁄ ⁄ ω⁄ ⁄ ˘⁄)♡"];
 const ACTIONS = ["*nuzzles*", "*blushes*", "*pounces on you*", "*wags tail*", "*stares at you*",
@@ -139,7 +171,7 @@ export function addTraps(channelId: string, count: number) {
         if (n >= wobbleAt && Math.random() < Math.min(0.9, (n - wobbleAt + 1) * 0.04)) continue;
         n++; stuck++;
     }
-    if (n > 0) traps.set(channelId, n);
+    setTraps(channelId, n);
     return stuck;
 }
 
@@ -157,12 +189,72 @@ function dodge(channelId: string, msg: { content: string; }) {
     const tired = now < tiredUntil;
     tiredUntil = now + (3 + Math.random() * 7) * 60_000;
     if (!tired && Math.random() * 100 < settings.store.dodgeChance) {
-        traps.delete(channelId);
+        setTraps(channelId, 0);
         msg.content = pick(DODGED);
     } else {
         addTraps(channelId, 1);
         msg.content = uwuify(pick(TRIPPED), settings.store.trapLevel as Level);
     }
+    save();
+}
+
+// ---------- !escape ----------
+// The hard way out: type N random codes in a row, each within a few seconds (only you see them).
+// The codes have invisible characters between the letters, so copy-pasting them fails.
+// Win: every trap in the channel is gone. Lose (wrong, too slow, or pasted): 3 more traps and an
+// uwuified "*gets dragged back in*" for everyone to see. Either way you can't try again for a while.
+let escapeUntil = 0;
+const CODE_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
+const ZW = "\u200b";
+const CAUGHT = ["*gets dragged back in*", "*trips on the way out*", "*almost escapes but gets caught*", "*runs straight into a wall*"];
+type Escape = { round: number; code: string; deadline: number; };
+const escapes = new Map<string, Escape>();
+
+const makeCode = () => Array.from({ length: 6 + Math.floor(Math.random() * 3) }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join("");
+const bot = (channelId: string, content: string) => sendBotMessage(channelId, { content });
+// a cancelled message stays in the chat box, so empty it
+const clearBox = () => setTimeout(() => ComponentDispatch.dispatchToLastSubscribed("CLEAR_TEXT"), 0);
+
+function nextCode(channelId: string, round: number) {
+    const code = makeCode();
+    escapes.set(channelId, { round, code, deadline: Date.now() + settings.store.escapeSeconds * 1000 });
+    bot(channelId, `🔐 Code ${round}/${settings.store.escapeRounds} (${settings.store.escapeSeconds}s, type it, don't paste): **${code.split("").join(ZW)}**`);
+}
+
+function startEscape(channelId: string) {
+    const now = Date.now();
+    if (now < escapeUntil) {
+        bot(channelId, `😮‍💨 Too tired to escape. Try again in ${Math.ceil((escapeUntil - now) / 60_000)} min.`);
+        return;
+    }
+    escapeUntil = now + settings.store.escapeCooldown * 60_000;
+    save();
+    bot(channelId, `🏃 Escape attempt! Type ${settings.store.escapeRounds} codes in a row, exactly (capitals matter), ${settings.store.escapeSeconds} seconds each. One mistake and you get 3 more traps.`);
+    nextCode(channelId, 1);
+}
+
+// returns true if this message was an answer (it's never sent as is)
+function answerEscape(channelId: string, msg: { content: string; }): { cancel: boolean; } | undefined {
+    const e = escapes.get(channelId);
+    if (!e) return;
+    const answer = msg.content.trim();
+    const pasted = /[\u200b-\u200d\u2060\ufeff]/.test(answer);
+    const ok = !pasted && Date.now() <= e.deadline && answer === e.code;
+    if (!ok) {
+        escapes.delete(channelId);
+        addTraps(channelId, 3);
+        bot(channelId, pasted ? "😼 No copy-pasting! +3 traps." : Date.now() > e.deadline ? "⌛ Too slow! +3 traps." : `❌ Wrong, it was **${e.code}**. +3 traps.`);
+        msg.content = uwuify(pick(CAUGHT), settings.store.trapLevel as Level);
+        return;
+    }
+    if (e.round < settings.store.escapeRounds) {
+        nextCode(channelId, e.round + 1);
+        clearBox();
+        return { cancel: true };
+    }
+    escapes.delete(channelId);
+    setTraps(channelId, 0);
+    msg.content = "uwus removed";
 }
 
 export default definePlugin({
@@ -171,16 +263,29 @@ export default definePlugin({
     authors: [{ name: "Arham", id: 0n }],
     settings,
 
+    async start() {
+        const saved = await DataStore.get<{ traps?: Record<string, number>; tiredUntil?: number; escapeUntil?: number; }>(SAVE_KEY);
+        if (!saved) return;
+        for (const [id, n] of Object.entries(saved.traps ?? {})) if (n > 0 && !traps.has(id)) traps.set(id, n);
+        tiredUntil = Math.max(tiredUntil, saved.tiredUntil ?? 0);
+        escapeUntil = Math.max(escapeUntil, saved.escapeUntil ?? 0);
+    },
+
     onBeforeMessageSend(channelId, msg) {
         if (!msg.content.trim() || msg.content.startsWith("/")) return;
         if ((msg as any).meowTranslated || /^\s*!(cat|dog|fox|bird)\s/i.test(msg.content)) return;   // MeowTranslator messages
+        if (escapes.has(channelId)) return answerEscape(channelId, msg);
         if (settings.store.friendTrigger && /^\s*!dodge\s*$/i.test(msg.content)) return dodge(channelId, msg);
+        if (settings.store.friendTrigger && /^\s*!escape\s*$/i.test(msg.content)) {
+            startEscape(channelId);
+            clearBox();
+            return { cancel: true };
+        }
         // never uwuify an !uwu (it would turn into "!u-uwu" and not count), and don't use up a trap on it
         if (UWU_CMD.test(msg.content)) return;
         const left = traps.get(channelId) ?? 0;
         if (left > 0) {
-            if (left > 1) traps.set(channelId, left - 1);
-            else traps.delete(channelId);
+            setTraps(channelId, left - 1);
             msg.content = uwuify(msg.content, settings.store.trapLevel as Level);
         } else if (Math.random() * 100 < settings.store.chance) {
             msg.content = uwuify(msg.content);
