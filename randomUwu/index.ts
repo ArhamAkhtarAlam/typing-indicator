@@ -201,12 +201,11 @@ function dodge(channelId: string, msg: { content: string; }) {
 // ---------- !escape ----------
 // The hard way out: type N random codes in a row, each within a few seconds (only you see them).
 // The codes have invisible characters between the letters, so copy-pasting them fails.
-// Win: every trap in the channel is gone. Lose (wrong, too slow, or pasted): 3 more traps and an
-// uwuified "*gets dragged back in*" for everyone to see. Either way you can't try again for a while.
+// Win: every trap in the channel is gone. Lose (wrong, too slow, or pasted): 3 more traps, and nothing
+// is sent. Either way you can't try again for a while.
 let escapeUntil = 0;
 const CODE_CHARS = "abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789";
 const ZW = "\u200b";
-const CAUGHT = ["*gets dragged back in*", "*trips on the way out*", "*almost escapes but gets caught*", "*runs straight into a wall*"];
 type Escape = { round: number; code: string; deadline: number; };
 const escapes = new Map<string, Escape>();
 
@@ -244,8 +243,8 @@ function answerEscape(channelId: string, msg: { content: string; }): { cancel: b
         escapes.delete(channelId);
         addTraps(channelId, 3);
         bot(channelId, pasted ? "😼 No copy-pasting! +3 traps." : Date.now() > e.deadline ? "⌛ Too slow! +3 traps." : `❌ Wrong, it was **${e.code}**. +3 traps.`);
-        msg.content = uwuify(pick(CAUGHT), settings.store.trapLevel as Level);
-        return;
+        clearBox();
+        return { cancel: true };
     }
     if (e.round < settings.store.escapeRounds) {
         nextCode(channelId, e.round + 1);
