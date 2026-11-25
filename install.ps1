@@ -8,6 +8,10 @@
 #   $env:SKIP_INJECT = "1"               build only, don't patch Discord (e.g. you use Vesktop)
 #   $env:PLUGINS = "valorantDnd"         only install these plugin folders (default: all of them)
 #   $env:SKIP_AUTOFIX = "1"              don't set up the daily check / Fix Discord button
+#   $env:PREBUILT = "1"                  skip building, use the ready-made build (install-prebuilt.ps1)
+#
+# If git / Node.js are missing or the build can't run (e.g. Windows blocks pnpm with a "Device Guard"
+# error), it switches to the ready-made build by itself.
 
 $ErrorActionPreference = "Stop"
 
@@ -23,11 +27,19 @@ function Run {
     if ($LASTEXITCODE -ne 0) { Die "'$($args -join ' ')' failed" }
 }
 
+$PrebuiltUrl = "https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install-prebuilt.ps1"
+function Prebuilt($why) {
+    if ($why) { Write-Host "$why, so using the ready-made build instead (no building needed)" -ForegroundColor Yellow }
+    Invoke-Expression (Invoke-RestMethod $PrebuiltUrl)
+}
+
 # ---------- requirements ----------
-if (-not (Get-Command git -ErrorAction SilentlyContinue))  { Die "git is not installed. Get it from https://git-scm.com/download/win" }
-if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Die "Node.js is not installed. Get v22 or newer from https://nodejs.org" }
-$nodeMajor = [int](node -p "process.versions.node.split('.')[0]")
-if ($nodeMajor -lt 22) { Die "Node.js $nodeMajor is too old, Vencord needs v22+. Update from https://nodejs.org" }
+$Missing = $null
+if ($env:PREBUILT -eq "1") { $Missing = "" }
+elseif (-not (Get-Command git -ErrorAction SilentlyContinue))  { $Missing = "git isn't installed" }
+elseif (-not (Get-Command node -ErrorAction SilentlyContinue)) { $Missing = "Node.js isn't installed" }
+elseif ([int](node -p "process.versions.node.split('.')[0]") -lt 22) { $Missing = "Node.js is older than v22" }
+if ($null -ne $Missing) { Prebuilt $Missing; return }
 
 # use the .cmd shims: the .ps1 ones are blocked when PowerShell script execution is disabled (the default)
 $UsePnpm = [bool](Get-Command pnpm.cmd -ErrorAction SilentlyContinue)
@@ -77,20 +89,28 @@ try {
         Copy-Item -Recurse $src $dest
     }
 
+    $BuildFailed = $false
     Push-Location $VencordDir
     try {
-        Say "Installing dependencies (first time takes a minute)"
-        Pnpm install --frozen-lockfile
-        Say "Building"
-        Pnpm build
+        try {
+            Say "Installing dependencies (first time takes a minute)"
+            Pnpm install --frozen-lockfile
+            Say "Building"
+            Pnpm build
+        } catch {
+            $BuildFailed = $true
+        }
 
-        if ($env:SKIP_INJECT -ne "1") {
+        if ($BuildFailed) {
+            # handled below, after leaving the Vencord folder
+        } elseif ($env:SKIP_INJECT -ne "1") {
             Say "Patching Discord (pick your install if asked, then quit Discord fully when it says so)"
             Pnpm inject
             # Vencord's installer exits 0 even when it fails
             Write-Host "(If you saw 'Failed' above: fully quit Discord from the system tray and run this again.)" -ForegroundColor Yellow
         }
     } finally { Pop-Location }
+    if ($BuildFailed) { Prebuilt "Couldn't build on this computer"; return }
 
     # ---------- auto-fix after Discord updates ----------
     # Windows has a fake "python" that just opens the Microsoft Store, so check that it really runs

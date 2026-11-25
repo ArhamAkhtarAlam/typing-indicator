@@ -1,0 +1,64 @@
+# Builds Vencord with all the plugins in this repo and puts the result on the "prebuilt" release,
+# so install-prebuilt.ps1 can set it up without git, Node.js or pnpm on the friend's computer.
+# Runs on every push to main, every day (to keep up with Vencord + Discord updates), and by hand.
+name: Prebuilt Vencord
+
+on:
+    push:
+        branches: [main]
+    schedule:
+        - cron: "0 5 * * *"
+    workflow_dispatch:
+
+permissions:
+    contents: write
+
+concurrency:
+    group: prebuilt
+    cancel-in-progress: true
+
+jobs:
+    build:
+        runs-on: ubuntu-latest
+        steps:
+            - name: Checkout plugins
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+            - name: Checkout Vencord
+              uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+              with:
+                  repository: Vendicated/Vencord
+                  path: vencord
+
+            - name: Setup pnpm
+              uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+              with:
+                  package_json_file: vencord/package.json
+
+            - name: Use Node.js
+              uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+              with:
+                  node-version: 24
+
+            - name: Add plugins and build
+              working-directory: vencord
+              run: |
+                  mkdir -p src/userplugins
+                  for p in typingVerbs valorantDnd randomUwu autoMeow; do cp -R "../$p" src/userplugins/; done
+                  pnpm install --frozen-lockfile
+                  # standalone + no updater: Vencord's own updater would replace this build and drop the plugins
+                  pnpm build --standalone --disable-updater
+                  for n in TypingVerbs ValorantDND RandomUwU AutoMeow; do
+                      grep -q "name:\"$n\"" dist/renderer.js || { echo "::error::$n is missing from the build"; exit 1; }
+                  done
+                  mkdir -p ../out
+                  cp dist/patcher.js dist/preload.js dist/renderer.js dist/renderer.css ../out/
+                  echo "$(git rev-parse --short HEAD) $GITHUB_SHA" > ../out/version.txt
+
+            - name: Publish to the "prebuilt" release
+              env:
+                  GH_TOKEN: ${{ github.token }}
+              run: |
+                  gh release view prebuilt >/dev/null 2>&1 || gh release create prebuilt --title "Prebuilt Vencord + plugins" \
+                      --notes "Built automatically. Windows: run install-prebuilt.ps1 (see the README)." --latest=false
+                  gh release upload prebuilt out/* --clobber

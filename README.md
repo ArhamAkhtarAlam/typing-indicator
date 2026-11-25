@@ -24,6 +24,14 @@ curl -fsSL https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/ma
 irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install.ps1 | iex
 ```
 
+**Windows, no building** (no git or Node.js needed, and works when Windows blocks the normal installer with a *"blocked by your organization's Device Guard policy"* error): downloads a ready-made Vencord with all four plugins, asks you to quit Discord, patches it and starts it again. It also puts a **Fix Discord** button on your desktop for after Discord updates.
+
+```powershell
+irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install-prebuilt.ps1 | iex
+```
+
+The normal Windows installer switches to this by itself if git/Node.js are missing or the build gets blocked. The ready-made build is rebuilt by GitHub Actions on every change and once a day (the `prebuilt` release). To take Vencord out again: `$env:UNINSTALL="1"; irm https://raw.githubusercontent.com/ArhamAkhtarAlam/typing-indicator/main/install-prebuilt.ps1 | iex`.
+
 Then:
 
 1. Fully quit Discord and reopen it.
