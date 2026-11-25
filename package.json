@@ -1,0 +1,13 @@
+{
+    "name": "typing-indicator-plugins",
+    "private": true,
+    "type": "module",
+    "description": "Tests for the Vencord plugins in this repo (the plugins themselves are built inside Vencord)",
+    "scripts": {
+        "test": "node tests/run.mjs"
+    },
+    "devDependencies": {
+        "@electron/asar": "^4.3.4",
+        "esbuild": "^0.28.2"
+    }
+}
