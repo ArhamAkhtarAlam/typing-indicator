@@ -66,6 +66,48 @@ if ($env:UNINSTALL -ne "1") {
 # ---------- patch ----------
 # Discord loads resources\app\ before resources\app.asar, so a small folder that loads Vencord is enough,
 # and Discord's own app.asar stays untouched (Vencord loads it afterwards).
+# Discord updates go into a new app-x.y.z folder, so the loader copies itself there (on quit, at start
+# and every 30 min). Vencord's own copier is turned off: it's made for the app.asar way of patching and
+# would copy Discord's plain app.asar over the new version.
+$Loader = @'
+process.env.DISABLE_UPDATER_AUTO_PATCHING = "1";
+try {
+    const { app } = require("electron");
+    const fs = require("original-fs");
+    const path = require("path");
+    const parts = name => name.slice(4).split(".").map(Number);
+    const newer = (a, b) => {
+        const x = parts(a), y = parts(b);
+        for (let i = 0; i < Math.max(x.length, y.length); i++)
+            if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+        return false;
+    };
+    const carry = () => {
+        try {
+            const current = path.basename(path.join(__dirname, "..", ".."));
+            const root = path.join(__dirname, "..", "..", "..");
+            for (const d of fs.readdirSync(root)) {
+                if (!d.startsWith("app-") || !newer(d, current)) continue;
+                const res = path.join(root, d, "resources"), dest = path.join(res, "app");
+                if (fs.existsSync(dest)) continue;
+                // undo the app.asar way of patching (Discord's real app.asar was renamed to _app.asar)
+                if (fs.existsSync(path.join(res, "_app.asar"))) {
+                    fs.rmSync(path.join(res, "app.asar"), { force: true });
+                    fs.renameSync(path.join(res, "_app.asar"), path.join(res, "app.asar"));
+                }
+                if (!fs.existsSync(path.join(res, "app.asar"))) continue;
+                fs.mkdirSync(dest);
+                for (const f of ["index.js", "package.json"]) fs.copyFileSync(path.join(__dirname, f), path.join(dest, f));
+                console.log("[discord-plugins] Vencord carried over to " + d);
+            }
+        } catch (e) { console.error("[discord-plugins] couldn't carry Vencord over to the new Discord version", e); }
+    };
+    carry();
+    setInterval(carry, 30 * 60 * 1000).unref?.();
+    app.on("before-quit", carry);
+} catch (e) { console.error("[discord-plugins]", e); }
+require("PATCHER_PATH");
+'@
 $patcher = (Join-Path $VencordAt "patcher.js") -replace '\\', '\\'
 foreach ($i in $Installs) {
     $res = $i.Resources
@@ -79,7 +121,7 @@ foreach ($i in $Installs) {
     if ($env:UNINSTALL -eq "1") { Say "Removed Vencord from $($i.Name)"; continue }
 
     New-Item -ItemType Directory -Force -Path $appDir | Out-Null
-    Set-Content -Path (Join-Path $appDir "index.js") -Value "require(`"$patcher`");" -Encoding ASCII
+    Set-Content -Path (Join-Path $appDir "index.js") -Value $Loader.Replace("PATCHER_PATH", $patcher) -Encoding ASCII
     Set-Content -Path (Join-Path $appDir "package.json") -Value '{ "name": "discord", "main": "index.js" }' -Encoding ASCII
     Say "Patched $($i.Name)"
 }
