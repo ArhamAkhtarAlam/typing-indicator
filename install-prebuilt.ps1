@@ -64,79 +64,98 @@ if ($env:UNINSTALL -ne "1") {
 }
 
 # ---------- patch ----------
-# Discord loads resources\app\ before resources\app.asar, so a small folder that loads Vencord is enough,
-# and Discord's own app.asar stays untouched (Vencord loads it afterwards).
-# Discord updates go into a new app-x.y.z folder, so the loader copies itself there (on quit, at start
-# and every 30 min). Vencord's own copier is turned off: it's made for the app.asar way of patching and
-# would copy Discord's plain app.asar over the new version.
-$Loader = @'
-process.env.DISABLE_UPDATER_AUTO_PATCHING = "1";
-try {
-    const { app } = require("electron");
-    const fs = require("original-fs");
-    const path = require("path");
-    const parts = name => name.slice(4).split(".").map(Number);
-    const newer = (a, b) => {
-        const x = parts(a), y = parts(b);
-        for (let i = 0; i < Math.max(x.length, y.length); i++)
-            if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
-        return false;
-    };
-    const carry = () => {
-        try {
-            const current = path.basename(path.join(__dirname, "..", ".."));
-            const root = path.join(__dirname, "..", "..", "..");
-            for (const d of fs.readdirSync(root)) {
-                if (!d.startsWith("app-") || !newer(d, current)) continue;
-                const res = path.join(root, d, "resources"), dest = path.join(res, "app");
-                if (fs.existsSync(dest)) continue;
-                // undo the app.asar way of patching (Discord's real app.asar was renamed to _app.asar)
-                if (fs.existsSync(path.join(res, "_app.asar"))) {
-                    fs.rmSync(path.join(res, "app.asar"), { force: true });
-                    fs.renameSync(path.join(res, "_app.asar"), path.join(res, "app.asar"));
-                }
-                if (!fs.existsSync(path.join(res, "app.asar"))) continue;
-                fs.mkdirSync(dest);
-                for (const f of ["index.js", "package.json"]) fs.copyFileSync(path.join(__dirname, f), path.join(dest, f));
-                console.log("[discord-plugins] Vencord carried over to " + d);
-            }
-        } catch (e) { console.error("[discord-plugins] couldn't carry Vencord over to the new Discord version", e); }
-    };
-    carry();
-    setInterval(carry, 30 * 60 * 1000).unref?.();
-    app.on("before-quit", carry);
-} catch (e) { console.error("[discord-plugins]", e); }
-require("PATCHER_PATH");
-'@
-$patcher = (Join-Path $VencordAt "patcher.js") -replace '\\', '\\'
+# Same way as Vencord's own installer: Discord's app.asar is renamed to _app.asar, and a tiny app.asar
+# that loads Vencord takes its place (Vencord then loads _app.asar itself). Vencord also copies this
+# tiny app.asar into new Discord versions by itself, so it survives Discord updates.
+
+# anything that isn't plain ASCII is written as \uXXXX in the JS (so user names like "José" work)
+function AsciiJs($s) {
+    $out = ""
+    foreach ($c in $s.ToCharArray()) { if ([int]$c -gt 126) { $out += '\u{0:x4}' -f [int]$c } else { $out += $c } }
+    return $out
+}
+function Bytes($s) { return , ([byte[]][char[]]$s) }
+function U32($n) { return , ([byte[]]@(($n -band 255), (($n -shr 8) -band 255), (($n -shr 16) -band 255), (($n -shr 24) -band 255))) }
+
+# an asar file: [4][header size][header json as a "pickle" string][the files back to back]
+function AsarBytes($files) {
+    $json = '{"files":{'
+    $offset = 0
+    $first = $true
+    foreach ($f in $files) {
+        if (-not $first) { $json += "," }
+        $first = $false
+        $json += '"' + $f.Name + '":{"size":' + $f.Bytes.Length + ',"offset":"' + $offset + '"}'
+        $offset += $f.Bytes.Length
+    }
+    $json += '}}'
+    $jb = Bytes $json
+    $pad = (4 - ($jb.Length % 4)) % 4
+    $headerPickle = 8 + $jb.Length + $pad
+    $all = New-Object System.Collections.Generic.List[byte]
+    $all.AddRange((U32 4)); $all.AddRange((U32 $headerPickle))
+    $all.AddRange((U32 ($headerPickle - 4))); $all.AddRange((U32 $jb.Length))
+    $all.AddRange($jb)
+    for ($k = 0; $k -lt $pad; $k++) { $all.Add(0) }
+    foreach ($f in $files) { $all.AddRange($f.Bytes) }
+    return , $all.ToArray()
+}
+function WriteBytes($path, $bytes) {
+    if ($PSVersionTable.PSVersion.Major -ge 6) { Set-Content -Path $path -Value $bytes -AsByteStream }
+    else { Set-Content -Path $path -Value $bytes -Encoding Byte }
+}
+
+$patcher = AsciiJs ((Join-Path $VencordAt "patcher.js") -replace '\\', '\\')
+$Stub = AsarBytes @(
+    [pscustomobject]@{ Name = "index.js"; Bytes = (Bytes "require(`"$patcher`");`n") },
+    [pscustomobject]@{ Name = "package.json"; Bytes = (Bytes '{ "name": "discord", "main": "index.js" }') }
+)
+
 foreach ($i in $Installs) {
     $res = $i.Resources
+    $asar = Join-Path $res "app.asar"
+    $real = Join-Path $res "_app.asar"
+    # the old way this script patched (an app\ folder Discord ignores): remove it
     $appDir = Join-Path $res "app"
-    # undo the other way of patching (Vencord's installer renames Discord's app.asar to _app.asar)
-    if (Test-Path (Join-Path $res "_app.asar")) {
-        Remove-Item -Force (Join-Path $res "app.asar")
-        Rename-Item (Join-Path $res "_app.asar") "app.asar"
-    }
     if (Test-Path $appDir) { Remove-Item -Recurse -Force $appDir }
-    if ($env:UNINSTALL -eq "1") { Say "Removed Vencord from $($i.Name)"; continue }
 
-    New-Item -ItemType Directory -Force -Path $appDir | Out-Null
-    Set-Content -Path (Join-Path $appDir "index.js") -Value $Loader.Replace("PATCHER_PATH", $patcher) -Encoding ASCII
-    Set-Content -Path (Join-Path $appDir "package.json") -Value '{ "name": "discord", "main": "index.js" }' -Encoding ASCII
+    if ($env:UNINSTALL -eq "1") {
+        if (Test-Path $real) {
+            Remove-Item -Force $asar
+            Rename-Item $real "app.asar"
+        }
+        Say "Removed Vencord from $($i.Name)"
+        continue
+    }
+
+    # _app.asar already there = patched before (by this or the official Vencord installer): keep
+    # Discord's real one and just put our loader in front of it
+    if (-not (Test-Path $real)) { Rename-Item $asar "_app.asar" }
+    WriteBytes $asar $Stub
     Say "Patched $($i.Name)"
 }
 
 if ($env:UNINSTALL -ne "1") {
     # a 'Fix Discord' button on the desktop that just runs this again
-    try {
-        $desktop = [Environment]::GetFolderPath("Desktop")
-        if (-not $desktop) { $desktop = Join-Path $HOME "Desktop" }
-        Set-Content -Path (Join-Path $desktop "Fix Discord.cmd") -Encoding ASCII -Value @(
-            "@echo off",
-            "powershell -NoProfile -Command `"irm $ThisUrl | iex`"",
-            "pause"
-        )
-    } catch { }
+    # find the real Desktop (it can be inside OneDrive), without .NET calls that locked-down PowerShell blocks
+    $desktops = @()
+    try { $desktops += (Get-ItemProperty "HKCU:\Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders" -ErrorAction Stop).Desktop } catch { }
+    try { $desktops += [Environment]::GetFolderPath("Desktop") } catch { }
+    if ($env:OneDrive) { $desktops += Join-Path $env:OneDrive "Desktop" }
+    $desktops += Join-Path $env:USERPROFILE "Desktop"
+    $FixButton = $null
+    foreach ($d in $desktops) {
+        if (-not $d -or -not (Test-Path $d)) { continue }
+        try {
+            $FixButton = Join-Path $d "Fix Discord.cmd"
+            Set-Content -Path $FixButton -Encoding ASCII -Value @(
+                "@echo off",
+                "powershell -NoProfile -ExecutionPolicy Bypass -Command `"irm $ThisUrl | iex`"",
+                "pause"
+            )
+            break
+        } catch { $FixButton = $null }
+    }
 }
 
 # ---------- start Discord again ----------
@@ -151,5 +170,9 @@ Write-Host "Done! :3 Discord is starting with Vencord." -ForegroundColor Green
 Write-Host "Settings -> Vencord -> Plugins, then turn on what you want: AutoMeow, RandomUwU, TypingVerbs, ValorantDND."
 Write-Host "(RandomUwU's !uwu trap: also turn on 'Let friends type !uwu' in its settings.)"
 Write-Host ""
-Write-Host "Discord updates remove Vencord. When that happens, double-click 'Fix Discord' on your desktop" -ForegroundColor Cyan
-Write-Host "(or run this command again). It also gets you the newest plugins."
+Write-Host "Vencord moves along with Discord updates by itself. If it's ever gone, or you want the newest plugins:" -ForegroundColor Cyan
+if ($FixButton) {
+    Write-Host "   double-click 'Fix Discord' on your desktop ($FixButton), or run this command again."
+} else {
+    Write-Host "   run this command again. (Couldn't put a 'Fix Discord' button on your desktop.)"
+}
